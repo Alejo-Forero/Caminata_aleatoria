@@ -363,7 +363,7 @@ class CaminataAleatoria3D:
 
     def mostrar_estadisticas_3d(self, posiciones_x, posiciones_y, posiciones_z, conteo_direcciones):
         """Muestra estadísticas detalladas de la caminata 3D"""
-        print(f"\n📈 ESTADÍSTICAS DE LA CAMINATA 3D:")
+        print(f"\nESTADÍSTICAS DE LA CAMINATA 3D:")
 
         # Posiciones
         print(f"  Posición inicial: ({posiciones_x[0]}, {posiciones_y[0]}, {posiciones_z[0]})")
@@ -412,7 +412,7 @@ class CaminataAleatoria3D:
         print(f"  Total de pasos: {total_pasos}")
 
         # Análisis de simetría
-        print(f"\n⚖ANÁLISIS DE SIMETRÍA:")
+        print(f"\nANÁLISIS DE SIMETRÍA:")
         mov_horizontal = conteo_direcciones['Norte'] + conteo_direcciones['Sur'] + conteo_direcciones['Este'] + conteo_direcciones['Oeste']
         mov_vertical = conteo_direcciones['Arriba'] + conteo_direcciones['Abajo']
 
