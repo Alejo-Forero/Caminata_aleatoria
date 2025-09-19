@@ -120,7 +120,7 @@ def mostrar_resultados_pruebas(resultados):
         except json.JSONDecodeError:
             print(f"{nombre}: Error al procesar resultado")
 
-    print(f"\n📊 RESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
+    print(f"\nRESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
 
     return pruebas_pasadas == total_pruebas
 
