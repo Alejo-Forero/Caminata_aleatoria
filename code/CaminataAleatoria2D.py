@@ -152,9 +152,9 @@ class CaminataAleatoria2D:
                 if 1 <= pasos <= max_pasos:
                     return pasos
                 else:
-                    print(f"❌ Error: El número de pasos debe estar entre 1 y {max_pasos}")
+                    print(f"Error: El número de pasos debe estar entre 1 y {max_pasos}")
             except ValueError:
-                print("❌ Error: Ingrese un número entero válido")
+                print("Error: Ingrese un número entero válido")
 
     def determinar_direccion(self, numero_aleatorio):
 
