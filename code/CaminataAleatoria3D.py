@@ -441,7 +441,7 @@ class CaminataAleatoria3D:
                 todas_pasaron = self.mostrar_resultados_pruebas(resultados)
 
                 if not todas_pasaron:
-                    print("\n⚠ADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
+                    print("\nADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
                     continuar = input("¿Desea continuar con la simulación de todos modos? (s/n): ")
                     if not continuar.lower().startswith('s'):
                         print("Simulación cancelada. Intente con otros parámetros.")
