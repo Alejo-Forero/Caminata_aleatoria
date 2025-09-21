@@ -1,0 +1,1660 @@
+Index: code/CaminataAleatoria1D.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import json\r\nimport matplotlib.pyplot as plt\r\nimport sys\r\nimport os\r\n\r\n\r\nfrom pruebas.Generador import generar\r\n\r\n# Importar las funciones de pruebas directamente\r\nfrom pruebas.prueba_de_medias import prueba_de_medias\r\nfrom pruebas.prueba_de_varianza import prueba_de_varianza\r\nfrom pruebas.prueba_chi2_2 import prueba_chi_cuadrado\r\nfrom pruebas.ks import kolmogorov_smirnov_test\r\nfrom pruebas.poker import poker_test_json\r\nfrom pruebas.rachas import prueba_rachas\r\n\r\n# Diccionario de pruebas disponibles\r\nPRUEBAS_DISPONIBLES = {\r\n    \"medias\": prueba_de_medias,\r\n    \"varianza\": prueba_de_varianza,\r\n    \"chi\": prueba_chi_cuadrado,\r\n    \"kolmogorov\": kolmogorov_smirnov_test,\r\n    \"poker\": poker_test_json,\r\n    \"rachas\": prueba_rachas\r\n}\r\n\r\ndef ejecutar_pruebas(datos, pruebas, alpha):\r\n    \"\"\"Ejecuta las pruebas estadísticas seleccionadas\"\"\"\r\n    resultados = {}\r\n    for nombre, info in pruebas.items():\r\n        if nombre == \"kolmogorov\" and info != False and nombre in PRUEBAS_DISPONIBLES:\r\n            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, k=info.get(\"k\"), alpha=alpha)\r\n        elif nombre == \"chi\" and info != False and nombre in PRUEBAS_DISPONIBLES:\r\n            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, k=info.get(\"k\"), alpha=alpha)\r\n        elif info and nombre in PRUEBAS_DISPONIBLES:\r\n            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)\r\n    return resultados\r\n\r\ndef obtener_parametros():\r\n    \"\"\"Obtiene los parámetros del usuario para la generación de números\"\"\"\r\n    print(\"=== GENERACIÓN DE NÚMEROS PSEUDOALEATORIOS ===\")\r\n    print(\"Ingrese los parámetros para el generador congruencial lineal:\")\r\n\r\n    try:\r\n        x_o = int(input(\"Semilla inicial (x_0): \"))\r\n        k = int(input(\"Parámetro k: \"))\r\n        c = int(input(\"Constante aditiva (c): \"))\r\n        g = int(input(\"Exponente de módulo (g) donde m = 2^g: \"))\r\n        n = int(input(\"Cantidad de números a generar: \"))\r\n\r\n        if n < 10:\r\n            print(\"Advertencia: Se recomienda al menos 10 números para las pruebas estadísticas\")\r\n\r\n        return x_o, k, c, g, n\r\n    except ValueError:\r\n        print(\"Error: Ingrese solo números enteros\")\r\n        return obtener_parametros()\r\n\r\ndef configurar_pruebas():\r\n    print(\"\\n=== CONFIGURACIÓN DE PRUEBAS ESTADÍSTICAS ===\")\r\n    print(\"¿Qué pruebas desea ejecutar? (s/n)\")\r\n\r\n    pruebas = {}\r\n\r\n    pruebas[\"medias\"] = input(\"Prueba de Medias (s/n): \").lower().startswith('s')\r\n    pruebas[\"varianza\"] = input(\"Prueba de Varianza (s/n): \").lower().startswith('s')\r\n    pruebas[\"rachas\"] = input(\"Prueba de Rachas (s/n): \").lower().startswith('s')\r\n    pruebas[\"poker\"] = input(\"Prueba de Póker (s/n): \").lower().startswith('s')\r\n\r\n    if input(\"Prueba Chi-Cuadrado (s/n): \").lower().startswith('s'):\r\n        k = int(input(\"  Número de intervalos (k): \"))\r\n        pruebas[\"chi\"] = {\"k\": k}\r\n    else:\r\n        pruebas[\"chi\"] = False\r\n\r\n    if input(\"Prueba Kolmogorov-Smirnov (s/n): \").lower().startswith('s'):\r\n        k = int(input(\"  Número de intervalos (k): \"))\r\n        pruebas[\"kolmogorov\"] = {\"k\": k}\r\n    else:\r\n        pruebas[\"kolmogorov\"] = False\r\n\r\n    alpha = float(input(\"Nivel de significancia (alpha, ej: 0.05): \") or \"0.05\")\r\n\r\n    return pruebas, alpha\r\n\r\ndef mostrar_resultados_pruebas(resultados):\r\n    print(\"\\n=== RESULTADOS DE PRUEBAS ESTADÍSTICAS ===\")\r\n\r\n    pruebas_pasadas = 0\r\n    total_pruebas = 0\r\n\r\n    for nombre, resultado_json in resultados.items():\r\n        try:\r\n            resultado = json.loads(resultado_json)\r\n            total_pruebas += 1\r\n\r\n            aprobado = resultado.get(\"isApproved\", \"False\").lower() == \"true\"\r\n            if aprobado:\r\n                pruebas_pasadas += 1\r\n                status = \"PASÓ\"\r\n            else:\r\n                status = \"NO PASÓ\"\r\n\r\n            print(f\"\\n{resultado['test_name']}: {status}\")\r\n            print(f\"  Decisión: {resultado['decision']}\")\r\n\r\n            # Mostrar estadísticas clave según el tipo de prueba\r\n            if 'statistics' in resultado:\r\n                stats = resultado['statistics']\r\n                if 'chi2_total' in stats:\r\n                    print(f\"  Chi² calculado: {stats['chi2_total']:.4f}\")\r\n                    print(f\"  Chi² crítico: {stats['chi2_critico']:.4f}\")\r\n                elif 'max_difference' in stats:\r\n                    print(f\"  Diferencia máxima: {stats['max_difference']:.4f}\")\r\n                    print(f\"  Valor crítico: {stats['critical_value']:.4f}\")\r\n                elif 'Chi2_calculado' in stats:\r\n                    print(f\"  Chi² calculado: {stats['Chi2_calculado']:.4f}\")\r\n                    print(f\"  Valor crítico: {stats['critical_value']:.4f}\")\r\n\r\n        except json.JSONDecodeError:\r\n            print(f\"{nombre}: Error al procesar resultado\")\r\n\r\n    print(f\"\\n\uD83D\uDCCA RESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas\")\r\n\r\n    return pruebas_pasadas == total_pruebas\r\n\r\ndef obtener_numero_pasos(max_pasos):\r\n    \"\"\"Obtiene el número de pasos que el usuario quiere simular\"\"\"\r\n    while True:\r\n        try:\r\n            pasos = int(input(f\"¿Cuántos pasos quiere que dé la rana? (máximo {max_pasos}): \"))\r\n            if 1 <= pasos <= max_pasos:\r\n                return pasos\r\n            else:\r\n                print(f\"Error: El número de pasos debe estar entre 1 y {max_pasos}\")\r\n        except ValueError:\r\n            print(\"Error: Ingrese un número entero válido\")\r\n\r\ndef simular_caminata(numeros_aleatorios, posicion_inicial=0, num_pasos=None):\r\n    \"\"\"Simula la caminata aleatoria de la rana\"\"\"\r\n    if num_pasos is None:\r\n        num_pasos = len(numeros_aleatorios)\r\n\r\n    # Usar solo los primeros num_pasos números\r\n    numeros_a_usar = numeros_aleatorios[:num_pasos]\r\n\r\n    print(f\"\\n=== SIMULACIÓN DE CAMINATA ALEATORIA ===\")\r\n    print(f\"Posición inicial: {posicion_inicial}\")\r\n    print(f\"Probabilidad de avanzar: 0.5\")\r\n    print(f\"Número de pasos a simular: {num_pasos}\")\r\n    print(f\"Números disponibles: {len(numeros_aleatorios)}\")\r\n\r\n    posiciones = [posicion_inicial]\r\n    posicion_actual = posicion_inicial\r\n\r\n    print(\"\\nPasos de la rana:\")\r\n    for i, numero in enumerate(numeros_a_usar):\r\n        if numero >= 0.5:\r\n            posicion_actual += 1\r\n            movimiento = \"→ (+1)\"\r\n        else:\r\n            posicion_actual -= 1\r\n            movimiento = \"← (-1)\"\r\n\r\n        posiciones.append(posicion_actual)\r\n        print(f\"Paso {i+1:2d}: r={numero:.5f} {movimiento} → Posición: {posicion_actual}\")\r\n\r\n    return posiciones\r\n\r\ndef graficar_caminata(posiciones):\r\n    \"\"\"Grafica la trayectoria de la rana\"\"\"\r\n    pasos = list(range(len(posiciones)))\r\n\r\n    plt.figure(figsize=(12, 6))\r\n    plt.plot(pasos, posiciones, 'b-o', linewidth=2, markersize=4)\r\n    plt.axhline(y=0, color='r', linestyle='--', alpha=0.5, label='Posición inicial')\r\n\r\n    plt.xlabel('Número de Pasos')\r\n    plt.ylabel('Posición de la Rana')\r\n    plt.title('Caminata Aleatoria de una Rana')\r\n    plt.grid(True, alpha=0.3)\r\n    plt.legend()\r\n\r\n    # Anotaciones\r\n    plt.annotate(f'Inicio\\nPos: {posiciones[0]}',\r\n                 xy=(0, posiciones[0]), xytext=(5, posiciones[0]+0.5),\r\n                 arrowprops=dict(arrowstyle='->', color='green'))\r\n\r\n    plt.annotate(f'Final\\nPos: {posiciones[-1]}',\r\n                 xy=(len(posiciones)-1, posiciones[-1]),\r\n                 xytext=(len(posiciones)-6, posiciones[-1]+0.5),\r\n                 arrowprops=dict(arrowstyle='->', color='red'))\r\n\r\n    plt.tight_layout()\r\n    plt.show()\r\n\r\n    # Estadísticas de la caminata\r\n    desplazamiento_final = posiciones[-1] - posiciones[0]\r\n    distancia_maxima = max(posiciones) - min(posiciones)\r\n\r\n    print(f\"\\nESTADÍSTICAS DE LA CAMINATA:\")\r\n    print(f\"  Posición inicial: {posiciones[0]}\")\r\n    print(f\"  Posición final: {posiciones[-1]}\")\r\n    print(f\"  Desplazamiento neto: {desplazamiento_final}\")\r\n    print(f\"  Rango de posiciones: [{min(posiciones)}, {max(posiciones)}]\")\r\n    print(f\"  Distancia total recorrida: {len(posiciones)-1} pasos\")\r\n\r\ndef main():\r\n    print(\"SIMULADOR DE CAMINATA ALEATORIA DE UNA RANA\")\r\n    print(\"=\" * 50)\r\n\r\n    x_o, k, c, g, n = obtener_parametros()\r\n\r\n    print(f\"\\nenerando {n} números pseudoaleatorios...\")\r\n    df = generar(x_o, k, c, g, n)\r\n    numeros = df['Ri'].tolist()\r\n    print(f\"Números generados exitosamente\")\r\n    print(f\"Primeros 5 números: {numeros[:5]}\")\r\n\r\n    pruebas, alpha = configurar_pruebas()\r\n\r\n    if any(pruebas.values()):\r\n        print(f\"\\nEjecutando pruebas estadísticas...\")\r\n        resultados = ejecutar_pruebas(numeros, pruebas, alpha)\r\n\r\n        todas_pasaron = mostrar_resultados_pruebas(resultados)\r\n\r\n        if not todas_pasaron:\r\n            print(\"\\nADVERTENCIA: No todos los números pasaron las pruebas estadísticas\")\r\n            continuar = input(\"¿Desea continuar con la simulación de todos modos? (s/n): \")\r\n            if not continuar.lower().startswith('s'):\r\n                print(\"Simulación cancelada. Intente con otros parámetros.\")\r\n                return\r\n    else:\r\n        print(\"No se ejecutaron pruebas estadísticas\")\r\n        continuar = input(\"¿Desea continuar sin pruebas? (s/n): \")\r\n        if not continuar.lower().startswith('s'):\r\n            return\r\n\r\n    print(f\"\\nIniciando simulación de caminata aleatoria...\")\r\n    posicion_inicial = int(input(\"Posición inicial de la rana (0): \") or \"0\")\r\n\r\n    # Obtener número de pasos\r\n    num_pasos = obtener_numero_pasos(len(numeros))\r\n\r\n    posiciones = simular_caminata(numeros, posicion_inicial, num_pasos)\r\n\r\n    print(f\"\\nGenerando gráfica...\")\r\n    graficar_caminata(posiciones)\r\n\r\n    print(f\"\\nSimulación completada exitosamente!\")\r\n\r\nif __name__ == \"__main__\":\r\n    try:\r\n        main()\r\n    except KeyboardInterrupt:\r\n        print(\"\\n\\nSimulación interrumpida por el usuario\")\r\n    except Exception as e:\r\n        print(f\"\\nError inesperado: {e}\")
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/CaminataAleatoria1D.py b/code/CaminataAleatoria1D.py
+--- a/code/CaminataAleatoria1D.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ b/code/CaminataAleatoria1D.py	(date 1758379166588)
+@@ -1,19 +1,18 @@
+-import json
+-import matplotlib.pyplot as plt
+-import sys
+-import os
+-
++import json                         # Manejo de archivos JSON (guardar/cargar datos estructurados)
++import os                           # Funciones del sistema operativo (comprobar existencia de archivos, etc.)
++import time                         # Medir tiempos de ejecución
++import matplotlib.pyplot as plt     # Generar gráficas (histogramas, caminatas)
++import numpy as np                  # Operaciones matemáticas y estadísticas
+ 
+-from pruebas.Generador import generar
++from pruebas.Generador import generar                           # Generador de numeros pseudoaleatorios, metodo Congruencia lineal
++from pruebas.prueba_de_medias import prueba_de_medias           # Prueba estadistica de medias
++from pruebas.prueba_de_varianza import prueba_de_varianza       # Prueba de varianza
++from pruebas.prueba_chi2_2 import prueba_chi_cuadrado           # Prueba de chi-cuadrado
++from pruebas.ks import kolmogorov_smirnov_test                  # Prueba de Kolmogorov-Smirnov
++from pruebas.poker import poker_test_json                       # Prueba de poker
++from pruebas.rachas import prueba_rachas                        # Prueba de rachas
+ 
+-# Importar las funciones de pruebas directamente
+-from pruebas.prueba_de_medias import prueba_de_medias
+-from pruebas.prueba_de_varianza import prueba_de_varianza
+-from pruebas.prueba_chi2_2 import prueba_chi_cuadrado
+-from pruebas.ks import kolmogorov_smirnov_test
+-from pruebas.poker import poker_test_json
+-from pruebas.rachas import prueba_rachas
+-
++ARCHIVO_HISTORICO = "caminatas.json"
+ # Diccionario de pruebas disponibles
+ PRUEBAS_DISPONIBLES = {
+     "medias": prueba_de_medias,
+@@ -23,9 +22,114 @@
+     "poker": poker_test_json,
+     "rachas": prueba_rachas
+ }
+-
++#Carga el histórico de posiciones finales desde el archivo JSON
++# Abre caminatas.json si existe retorna una lista de posiciones finales guardadas.
++# Si el archivo no existe devuelve un mensaje de error.
++def cargar_historico():
++    try:
++        if os.path.exists(ARCHIVO_HISTORICO):
++            with open(ARCHIVO_HISTORICO, 'r', encoding='utf-8') as f:
++                return json.load(f)
++        else:
++            return []
++    except (json.JSONDecodeError, FileNotFoundError):
++        print("Archivo de histórico no encontrado.")
++        return []
++# Guarda el histórico de posiciones finales en el archivo JSON
++# Abre y sobrescribe caminatas.json con la lista de posiciones finales recibida
++# Devuelve True si sale bien, false si falla la operacion
++def guardar_historico(posiciones_finales):
++    try:
++        with open(ARCHIVO_HISTORICO, 'w', encoding='utf-8') as f:
++            json.dump(posiciones_finales, f, indent=2)
++        return True
++    except Exception as e:
++        print(f"Error al guardar histórico: {e}")
++        return False
++# Agrega una nueva posición final al histórico
++# Carga el histórico existente, agrega la nueva posición y lo guarda.
++# Retorna True si se guardó correctamente.
++def agregar_posicion_final_al_historico(posicion_final):
++    historico = cargar_historico()
++    historico.append(posicion_final)
++    if guardar_historico(historico):
++        print(f"\nPosición final guardada: {posicion_final}")
++        return True
++    else:
++        print("\nError al guardar la posición final")
++        return False
++# Genera un histograma de las posiciones finales de todas las simulaciones
++# Carga todas las posiciones finales guardadas.
++# Genera un histograma con la libreria matplotlib.
++# Las estadisticas que muestra son media, desviación estándar, mediana, mínimo y máximo.
++def generar_histograma_posiciones_finales():
++    posiciones_finales = cargar_historico()
++    if not posiciones_finales:
++        print("\nNo hay datos para generar el histograma")
++        return
++    plt.figure(figsize=(10, 6))
++    plt.hist(posiciones_finales, bins=min(20, len(set(posiciones_finales))),
++    alpha=0.7, color='skyblue', edgecolor='black')
++    plt.axvline(np.mean(posiciones_finales), color='red', linestyle='--',
++    label=f'Media: {np.mean(posiciones_finales):.2f}')
++    plt.xlabel('Posición Final')
++    plt.ylabel('Frecuencia')
++    plt.title(f'Histograma de Posiciones Finales\n({len(posiciones_finales)} simulaciones)')
++    plt.legend()
++    plt.grid(True, alpha=0.3)
++    plt.tight_layout()
++    plt.show()
++    # Muestra estadísticas básicas
++    print(f"\nESTADÍSTICAS DE LAS POSICIONES FINALES:")
++    print(f"  Total de simulaciones: {len(posiciones_finales)}")
++    print(f"  Media: {np.mean(posiciones_finales):.3f}")
++    print(f"  Desviación estándar: {np.std(posiciones_finales):.3f}")
++    print(f"  Mediana: {np.median(posiciones_finales):.3f}")
++    print(f"  Mínima: {min(posiciones_finales)}")
++    print(f"  Máxima: {max(posiciones_finales)}")
++# Permite limpiar el histórico de posiciones finales
++# Abre el archivo y revisa si esta vacio si lo esta
++# Pide confirmación al usuario
++# Si confirma, vacía el archivo caminatas.json
++def limpiar_historico():
++    posiciones_finales = cargar_historico()
++    if not posiciones_finales:
++        print("\nNo hay datos para limpiar")
++        return
++    print(f"\n⚠ADVERTENCIA: Esta acción eliminará todas las {len(posiciones_finales)} posiciones finales guardadas")
++    confirmacion = input("¿Está seguro de que desea limpiar el histórico? (escriba 's' para continuar): ")
++    if confirmacion == "s":
++        if guardar_historico([]):
++            print("Histórico limpiado exitosamente")
++        else:
++            print("Error al limpiar el histórico")
++    else:
++        print("Operación cancelada")
++# Muestra el menú de opciones para generar el histograma histórico de las simulaciones
++# las opciones son ver histograma limpiar histórico y volver al menú principal
++def menu_historico():
++    while True:
++        posiciones_finales = cargar_historico()
++        print(f"\nMENÚ DE HISTÓRICO")
++        print(f"{'='*30}")
++        print(f"Simulaciones guardadas: {len(posiciones_finales)}")
++        print("1. Generar histograma de posiciones finales")
++        print("2. Limpiar histórico")
++        print("3. Volver al menú principal")
++        opcion = input("\nSeleccione una opción (1-3): ").strip()
++        if opcion == "1":
++            generar_histograma_posiciones_finales()
++        elif opcion == "2":
++            limpiar_historico()
++        elif opcion == "3":
++            break
++        else:
++            print("Opción inválida. Por favor, seleccione entre 1 y 3.")
++# Ejecuta las pruebas estadísticas seleccionadas
++# El parametro datos es la lista de números pseudoaleatorios.
++# El parametro pruebas es el diccionario con las pruebas activadas o desactivadas
++# alpha es el nivel de significancia y Retorna un diccionario con resultados
+ def ejecutar_pruebas(datos, pruebas, alpha):
+-    """Ejecuta las pruebas estadísticas seleccionadas"""
+     resultados = {}
+     for nombre, info in pruebas.items():
+         if nombre == "kolmogorov" and info != False and nombre in PRUEBAS_DISPONIBLES:
+@@ -35,76 +139,71 @@
+         elif info and nombre in PRUEBAS_DISPONIBLES:
+             resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)
+     return resultados
+-
++# Obtiene los parámetros del usuario para la generación de números
++# Pide al usuario: x_o: semilla inicial. k, c, g: parámetros del GCL. n: cantidad de números
++# se recomienda que la semilla se impar que k y c tambien sean impar y que g sea un numero muy grande y par
++# n define la cantidad de numeros que se van a generar
++# Retorna esos valores como tupla.
+ def obtener_parametros():
+-    """Obtiene los parámetros del usuario para la generación de números"""
+     print("=== GENERACIÓN DE NÚMEROS PSEUDOALEATORIOS ===")
+     print("Ingrese los parámetros para el generador congruencial lineal:")
+-
+     try:
+         x_o = int(input("Semilla inicial (x_0): "))
+         k = int(input("Parámetro k: "))
+         c = int(input("Constante aditiva (c): "))
+         g = int(input("Exponente de módulo (g) donde m = 2^g: "))
+         n = int(input("Cantidad de números a generar: "))
+-
+         if n < 10:
+             print("Advertencia: Se recomienda al menos 10 números para las pruebas estadísticas")
+-
+         return x_o, k, c, g, n
+     except ValueError:
+         print("Error: Ingrese solo números enteros")
+         return obtener_parametros()
+-
++#Configura las pruebas estadísticas a ejecutar pregunta al usuario qué pruebas quiere correr
++# Devuelve un diccionario con las pruebas elegidas
++# alpha es nivel de significancia el nivel preestablecido  es 0.05
++# en la prueba de chi-cuadrados se recomienda dejar un intervalo k de 8 y la de kolmogorov dejar un intervalo k de 10
+ def configurar_pruebas():
+     print("\n=== CONFIGURACIÓN DE PRUEBAS ESTADÍSTICAS ===")
+     print("¿Qué pruebas desea ejecutar? (s/n)")
+-
+     pruebas = {}
+-
++    # Pruebas básicas
+     pruebas["medias"] = input("Prueba de Medias (s/n): ").lower().startswith('s')
+     pruebas["varianza"] = input("Prueba de Varianza (s/n): ").lower().startswith('s')
+     pruebas["rachas"] = input("Prueba de Rachas (s/n): ").lower().startswith('s')
+     pruebas["poker"] = input("Prueba de Póker (s/n): ").lower().startswith('s')
+-
++    # Pruebas con parámetros
+     if input("Prueba Chi-Cuadrado (s/n): ").lower().startswith('s'):
+         k = int(input("  Número de intervalos (k): "))
+         pruebas["chi"] = {"k": k}
+     else:
+         pruebas["chi"] = False
+-
+     if input("Prueba Kolmogorov-Smirnov (s/n): ").lower().startswith('s'):
+         k = int(input("  Número de intervalos (k): "))
+         pruebas["kolmogorov"] = {"k": k}
+     else:
+         pruebas["kolmogorov"] = False
+-
+     alpha = float(input("Nivel de significancia (alpha, ej: 0.05): ") or "0.05")
+-
+     return pruebas, alpha
+-
++# Muestra los resultados de las pruebas estadísticas Procesa cada resultado
++# Informa si cada prueba pasó o no y Devuelve True si todas pasaron imprime un estatus de que pruebas fallaron y cuales pasaron
+ def mostrar_resultados_pruebas(resultados):
+     print("\n=== RESULTADOS DE PRUEBAS ESTADÍSTICAS ===")
+-
+     pruebas_pasadas = 0
+     total_pruebas = 0
+-
+     for nombre, resultado_json in resultados.items():
+         try:
+             resultado = json.loads(resultado_json)
+             total_pruebas += 1
+-
+             aprobado = resultado.get("isApproved", "False").lower() == "true"
+             if aprobado:
+                 pruebas_pasadas += 1
+                 status = "PASÓ"
+             else:
+                 status = "NO PASÓ"
+-
+             print(f"\n{resultado['test_name']}: {status}")
+             print(f"  Decisión: {resultado['decision']}")
+-
+-            # Mostrar estadísticas clave según el tipo de prueba
++            # Mostrar estadísticas clave según el tipo de prueba es para entender porque fallaron
+             if 'statistics' in resultado:
+                 stats = resultado['statistics']
+                 if 'chi2_total' in stats:
+@@ -116,16 +215,14 @@
+                 elif 'Chi2_calculado' in stats:
+                     print(f"  Chi² calculado: {stats['Chi2_calculado']:.4f}")
+                     print(f"  Valor crítico: {stats['critical_value']:.4f}")
+-
+         except json.JSONDecodeError:
+             print(f"{nombre}: Error al procesar resultado")
+-
+-    print(f"\n📊 RESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
+-
++    print(f"\nRESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
+     return pruebas_pasadas == total_pruebas
+-
++# Obtiene el número de pasos que el usuario quiere simular
++# La variable max_pasos es la cantidad de numeros generados anteriormente
++# Se asegura que esté entre 1 y max_pasos = (la cantidad maxima de numeros generados)
+ def obtener_numero_pasos(max_pasos):
+-    """Obtiene el número de pasos que el usuario quiere simular"""
+     while True:
+         try:
+             pasos = int(input(f"¿Cuántos pasos quiere que dé la rana? (máximo {max_pasos}): "))
+@@ -135,24 +232,20 @@
+                 print(f"Error: El número de pasos debe estar entre 1 y {max_pasos}")
+         except ValueError:
+             print("Error: Ingrese un número entero válido")
+-
++# Simula la caminata aleatoria de la rana"""
++# Usa números en un intervalo [0,1] para decidir movimientos: >=0.5 → derecha (+1). <0.5 → izquierda (–1). Retorna la lista de posiciones.
+ def simular_caminata(numeros_aleatorios, posicion_inicial=0, num_pasos=None):
+-    """Simula la caminata aleatoria de la rana"""
+     if num_pasos is None:
+         num_pasos = len(numeros_aleatorios)
+-
+     # Usar solo los primeros num_pasos números
+     numeros_a_usar = numeros_aleatorios[:num_pasos]
+-
+     print(f"\n=== SIMULACIÓN DE CAMINATA ALEATORIA ===")
+     print(f"Posición inicial: {posicion_inicial}")
+     print(f"Probabilidad de avanzar: 0.5")
+     print(f"Número de pasos a simular: {num_pasos}")
+     print(f"Números disponibles: {len(numeros_aleatorios)}")
+-
+     posiciones = [posicion_inicial]
+     posicion_actual = posicion_inicial
+-
+     print("\nPasos de la rana:")
+     for i, numero in enumerate(numeros_a_usar):
+         if numero >= 0.5:
+@@ -161,26 +254,22 @@
+         else:
+             posicion_actual -= 1
+             movimiento = "← (-1)"
+-
+         posiciones.append(posicion_actual)
+         print(f"Paso {i+1:2d}: r={numero:.5f} {movimiento} → Posición: {posicion_actual}")
+-
+     return posiciones
+-
++# Grafica la trayectoria de la rana el Eje X son los pasos y el Eje Y las posiciones
++# Añade anotaciones de inicio y final
++# Calcula el desplazamiento neto, rango, total de pasos.
+ def graficar_caminata(posiciones):
+-    """Grafica la trayectoria de la rana"""
+     pasos = list(range(len(posiciones)))
+-
+     plt.figure(figsize=(12, 6))
+     plt.plot(pasos, posiciones, 'b-o', linewidth=2, markersize=4)
+     plt.axhline(y=0, color='r', linestyle='--', alpha=0.5, label='Posición inicial')
+-
+     plt.xlabel('Número de Pasos')
+     plt.ylabel('Posición de la Rana')
+     plt.title('Caminata Aleatoria de una Rana')
+     plt.grid(True, alpha=0.3)
+     plt.legend()
+-
+     # Anotaciones
+     plt.annotate(f'Inicio\nPos: {posiciones[0]}',
+                  xy=(0, posiciones[0]), xytext=(5, posiciones[0]+0.5),
+@@ -190,14 +279,11 @@
+                  xy=(len(posiciones)-1, posiciones[-1]),
+                  xytext=(len(posiciones)-6, posiciones[-1]+0.5),
+                  arrowprops=dict(arrowstyle='->', color='red'))
+-
+     plt.tight_layout()
+     plt.show()
+-
+     # Estadísticas de la caminata
+     desplazamiento_final = posiciones[-1] - posiciones[0]
+     distancia_maxima = max(posiciones) - min(posiciones)
+-
+     print(f"\nESTADÍSTICAS DE LA CAMINATA:")
+     print(f"  Posición inicial: {posiciones[0]}")
+     print(f"  Posición final: {posiciones[-1]}")
+@@ -208,23 +294,38 @@
+ def main():
+     print("SIMULADOR DE CAMINATA ALEATORIA DE UNA RANA")
+     print("=" * 50)
+-
++    while True:
++        print(f"\nMENÚ PRINCIPAL")
++        print(f"{'='*30}")
++        print("1. Nueva simulación de caminata")
++        print("2. Ver/gestionar histórico")
++        print("3. Salir")
++        opcion = input("\nSeleccione una opción (1-3): ").strip()
++        if opcion == "1":
++            ejecutar_simulacion()
++        elif opcion == "2":
++            menu_historico()
++        elif opcion == "3":
++            print("¡Hasta luego!")
++            break
++        else:
++            print("Opción inválida. Por favor, seleccione entre 1 y 3.")
++# Ejecuta una nueva simulación de caminata y el flujo completo de la simulacion lo que realiza es generar números pseudoaleatorios
++# Ejecuta pruebas estadísticas (si fueron seleccionadas)
++# Simula caminata de la rana. Grafica y guarda la posición final y por ultimo Mide el tiempo total.
++def ejecutar_simulacion():
++    tiempo_inicio = time.time()
+     x_o, k, c, g, n = obtener_parametros()
+-
+-    print(f"\nenerando {n} números pseudoaleatorios...")
++    print(f"\nGenerando {n} números pseudoaleatorios...")
+     df = generar(x_o, k, c, g, n)
+     numeros = df['Ri'].tolist()
+     print(f"Números generados exitosamente")
+     print(f"Primeros 5 números: {numeros[:5]}")
+-
+     pruebas, alpha = configurar_pruebas()
+-
+     if any(pruebas.values()):
+         print(f"\nEjecutando pruebas estadísticas...")
+         resultados = ejecutar_pruebas(numeros, pruebas, alpha)
+-
+         todas_pasaron = mostrar_resultados_pruebas(resultados)
+-
+         if not todas_pasaron:
+             print("\nADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
+             continuar = input("¿Desea continuar con la simulación de todos modos? (s/n): ")
+@@ -236,19 +337,20 @@
+         continuar = input("¿Desea continuar sin pruebas? (s/n): ")
+         if not continuar.lower().startswith('s'):
+             return
+-
+     print(f"\nIniciando simulación de caminata aleatoria...")
+     posicion_inicial = int(input("Posición inicial de la rana (0): ") or "0")
+-
+     # Obtener número de pasos
+     num_pasos = obtener_numero_pasos(len(numeros))
+-
+     posiciones = simular_caminata(numeros, posicion_inicial, num_pasos)
+-
+     print(f"\nGenerando gráfica...")
+     graficar_caminata(posiciones)
+-
+-    print(f"\nSimulación completada exitosamente!")
++    # Guardar solo la posición final en el histórico
++    agregar_posicion_final_al_historico(posiciones[-1])
++    # Calcula el tiempo de ejecución del programa en segundos
++    tiempo_fin = time.time()
++    tiempo_total = tiempo_fin - tiempo_inicio
++    print(f"\nTiempo total de ejecución: {tiempo_total:.3f} segundos")
++    print(f"Simulación completada exitosamente!")
+ 
+ if __name__ == "__main__":
+     try:
+Index: code/pruebas/Generador.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import pandas as pd\r\n\r\ndef generar(x0: int, t: int, g: int, n: int, min_value: float = 0, max_value: float = 1):\r\n\r\n    # Parámetros\r\n    m = 2 ** g\r\n    a = 8 * t + 3\r\n    xi = x0\r\n\r\n    # Resultados\r\n    data = []\r\n\r\n    for i in range(n):\r\n        xi = (a * xi) % m\r\n        ri = truncar(xi / (m - 1),5)   # Normalización\r\n        data.append([i + 1, xi, ri])\r\n\r\n    # Convertir en DataFrame\r\n    df = pd.DataFrame(data, columns=[\"i\", \"Xi\", \"Ri\"])\r\n    return df\r\n\r\ndef truncar(n, decimales=0):\r\n    factor = 10.0 ** decimales\r\n    return int(n * factor) / factor\r\n\r\n# # Ejemplo de uso\r\n# if __name__ == \"__main__\":\r\n#     tabla = generar(x0=5, t=3, g=16, n=50, min_value=0, max_value=100)\r\n#     print(tabla)\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/pruebas/Generador.py b/code/pruebas/Generador.py
+--- a/code/pruebas/Generador.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ b/code/pruebas/Generador.py	(date 1758390701470)
+@@ -1,29 +1,32 @@
++import numpy as np
+ import pandas as pd
+ 
+-def generar(x0: int, t: int, g: int, n: int, min_value: float = 0, max_value: float = 1):
+-
+-    # Parámetros
++def generar(x_o, k, c, g, n):
++    """
++    Generador de congruencia lineal
++    """
++    registros = []
++    a = 1 + 2 * k  # 'a' debe ser impar
++    x_a = x_o
+     m = 2 ** g
+-    a = 8 * t + 3
+-    xi = x0
+-
+-    # Resultados
+-    data = []
+ 
+     for i in range(n):
+-        xi = (a * xi) % m
+-        ri = truncar(xi / (m - 1),5)   # Normalización
+-        data.append([i + 1, xi, ri])
++        # Cálculo correcto del LCG
++        x_i = (a * x_a + c) % m
++        x_a = x_i
+ 
+-    # Convertir en DataFrame
+-    df = pd.DataFrame(data, columns=["i", "Xi", "Ri"])
+-    return df
++        # CConversión a número decimal [0,1)
++        # Usar división de punto flotante, no truncar prematuramente
++        r_i = x_i / m
+ 
+-def truncar(n, decimales=0):
+-    factor = 10.0 ** decimales
+-    return int(n * factor) / factor
++        # Formatear a exactamente 5 decimales para la prueba de poker
++        r_i_formatted = f"{r_i:.5f}"
+ 
+-# # Ejemplo de uso
+-# if __name__ == "__main__":
+-#     tabla = generar(x0=5, t=3, g=16, n=50, min_value=0, max_value=100)
+-#     print(tabla)
++        registros.append({
++            "i": i+1,
++            "Xi": int(x_i),
++            "Ri": float(r_i_formatted)  # Convertir de vuelta a float
++        })
++
++    df = pd.DataFrame(registros)
++    return df
+\ No newline at end of file
+Index: code/CaminataAleatoria3D.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import json\r\nimport matplotlib.pyplot as plt\r\nfrom mpl_toolkits.mplot3d import Axes3D\r\nimport numpy as np\r\nimport sys\r\nimport os\r\n\r\nfrom pruebas.Generador import generar\r\n\r\nfrom pruebas.prueba_de_medias import prueba_de_medias\r\nfrom pruebas.prueba_de_varianza import prueba_de_varianza\r\nfrom pruebas.prueba_chi2_2 import prueba_chi_cuadrado\r\nfrom pruebas.ks import kolmogorov_smirnov_test\r\nfrom pruebas.poker import poker_test_json\r\nfrom pruebas.rachas import prueba_rachas\r\n\r\nclass CaminataAleatoria3D:\r\n\r\n    def __init__(self):\r\n        self.direcciones = {\r\n            'Norte': (0, 1, 0),    # ↑ (Y+)\r\n            'Sur': (0, -1, 0),     # ↓ (Y-)\r\n            'Este': (1, 0, 0),     # → (X+)\r\n            'Oeste': (-1, 0, 0),   # ← (X-)\r\n            'Arriba': (0, 0, 1),   # ⬆ (Z+)\r\n            'Abajo': (0, 0, -1)    # ⬇ (Z-)\r\n        }\r\n        self.nombres_direcciones = ['Norte', 'Sur', 'Este', 'Oeste', 'Arriba', 'Abajo']\r\n        self.simbolos_direcciones = ['↑', '↓', '→', '←', '⬆', '⬇']\r\n\r\n        # Diccionario de pruebas disponibles\r\n        self.PRUEBAS_DISPONIBLES = {\r\n            \"medias\": prueba_de_medias,\r\n            \"varianza\": prueba_de_varianza,\r\n            \"chi\": prueba_chi_cuadrado,\r\n            \"kolmogorov\": kolmogorov_smirnov_test,\r\n            \"poker\": poker_test_json,\r\n            \"rachas\": prueba_rachas\r\n        }\r\n\r\n    def obtener_parametros_generacion(self):\r\n        \"\"\"Obtiene los parámetros del usuario para la generación de números\"\"\"\r\n        print(\"SIMULADOR DE CAMINATA ALEATORIA 3D\")\r\n        print(\"=\" * 50)\r\n        print(\"=== GENERACIÓN DE NÚMEROS PSEUDOALEATORIOS ===\")\r\n        print(\"Ingrese los parámetros para el generador congruencial lineal:\")\r\n\r\n        try:\r\n            x_o = int(input(\"Semilla inicial (x_0): \"))\r\n            k = int(input(\"Parámetro k: \"))\r\n            c = int(input(\"Constante aditiva (c): \"))\r\n            g = int(input(\"Exponente de módulo (g) donde m = 2^g: \"))\r\n            n = int(input(\"Cantidad de números a generar: \"))\r\n\r\n            if n < 10:\r\n                print(\"Advertencia: Se recomienda al menos 10 números para las pruebas estadísticas\")\r\n\r\n            return x_o, k, c, g, n\r\n        except ValueError:\r\n            print(\"Error: Ingrese solo números enteros\")\r\n            return self.obtener_parametros_generacion()\r\n\r\n    def configurar_pruebas(self):\r\n        print(\"\\n=== CONFIGURACIÓN DE PRUEBAS ESTADÍSTICAS ===\")\r\n        print(\"¿Qué pruebas desea ejecutar? (s/n)\")\r\n\r\n        pruebas = {}\r\n        # Pruebas básicas\r\n        pruebas[\"medias\"] = input(\"Prueba de Medias (s/n): \").lower().startswith('s')\r\n        pruebas[\"varianza\"] = input(\"Prueba de Varianza (s/n): \").lower().startswith('s')\r\n        pruebas[\"rachas\"] = input(\"Prueba de Rachas (s/n): \").lower().startswith('s')\r\n        pruebas[\"poker\"] = input(\"Prueba de Póker (s/n): \").lower().startswith('s')\r\n\r\n        # Pruebas con parámetros\r\n        if input(\"Prueba Chi-Cuadrado (s/n): \").lower().startswith('s'):\r\n            k = int(input(\"  Número de intervalos (k): \"))\r\n            pruebas[\"chi\"] = {\"k\": k}\r\n        else:\r\n            pruebas[\"chi\"] = False\r\n\r\n        if input(\"Prueba Kolmogorov-Smirnov (s/n): \").lower().startswith('s'):\r\n            k = int(input(\"  Número de intervalos (k): \"))\r\n            pruebas[\"kolmogorov\"] = {\"k\": k}\r\n        else:\r\n            pruebas[\"kolmogorov\"] = False\r\n\r\n        # Nivel de significancia\r\n        alpha = float(input(\"Nivel de significancia (alpha, ej: 0.05): \") or \"0.05\")\r\n\r\n        return pruebas, alpha\r\n\r\n    def ejecutar_pruebas(self, datos, pruebas, alpha):\r\n        \"\"\"Ejecuta las pruebas estadísticas seleccionadas\"\"\"\r\n        resultados = {}\r\n        for nombre, info in pruebas.items():\r\n            if nombre == \"kolmogorov\" and info != False and nombre in self.PRUEBAS_DISPONIBLES:\r\n                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, k=info.get(\"k\"), alpha=alpha)\r\n            elif nombre == \"chi\" and info != False and nombre in self.PRUEBAS_DISPONIBLES:\r\n                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, k=info.get(\"k\"), alpha=alpha)\r\n            elif info and nombre in self.PRUEBAS_DISPONIBLES:\r\n                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)\r\n        return resultados\r\n\r\n    def mostrar_resultados_pruebas(self, resultados):\r\n        \"\"\"Muestra los resultados de las pruebas estadísticas\"\"\"\r\n        print(\"\\n=== RESULTADOS DE PRUEBAS ESTADÍSTICAS ===\")\r\n\r\n        pruebas_pasadas = 0\r\n        total_pruebas = 0\r\n\r\n        for nombre, resultado_json in resultados.items():\r\n            try:\r\n                resultado = json.loads(resultado_json)\r\n                total_pruebas += 1\r\n\r\n                aprobado = resultado.get(\"isApproved\", \"False\").lower() == \"true\"\r\n                if aprobado:\r\n                    pruebas_pasadas += 1\r\n                    status = \"PASÓ\"\r\n                else:\r\n                    status = \"NO PASÓ\"\r\n\r\n                print(f\"\\n{resultado['test_name']}: {status}\")\r\n                print(f\"  Decisión: {resultado['decision']}\")\r\n\r\n                # Mostrar estadísticas clave según el tipo de prueba\r\n                if 'statistics' in resultado:\r\n                    stats = resultado['statistics']\r\n                    if 'chi2_total' in stats:\r\n                        print(f\"  Chi² calculado: {stats['chi2_total']:.4f}\")\r\n                        print(f\"  Chi² crítico: {stats['chi2_critico']:.4f}\")\r\n                    elif 'max_difference' in stats:\r\n                        print(f\"  Diferencia máxima: {stats['max_difference']:.4f}\")\r\n                        print(f\"  Valor crítico: {stats['critical_value']:.4f}\")\r\n                    elif 'Chi2_calculado' in stats:\r\n                        print(f\"  Chi² calculado: {stats['Chi2_calculado']:.4f}\")\r\n                        print(f\"  Valor crítico: {stats['critical_value']:.4f}\")\r\n\r\n            except json.JSONDecodeError:\r\n                print(f\"{nombre}: Error al procesar resultado\")\r\n\r\n        print(f\"\\nRESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas\")\r\n\r\n        return pruebas_pasadas == total_pruebas\r\n\r\n    def obtener_numero_pasos(self, max_pasos):\r\n        \"\"\"Obtiene el número de pasos que el usuario quiere simular\"\"\"\r\n        while True:\r\n            try:\r\n                pasos = int(input(f\"¿Cuántos pasos quiere que dé la rana? (máximo {max_pasos}): \"))\r\n                if 1 <= pasos <= max_pasos:\r\n                    return pasos\r\n                else:\r\n                    print(f\"Error: El número de pasos debe estar entre 1 y {max_pasos}\")\r\n            except ValueError:\r\n                print(\"Error: Ingrese un número entero válido\")\r\n\r\n    def determinar_direccion(self, numero_aleatorio):\r\n        \"\"\"\r\n        Determina la dirección de movimiento basada en el número aleatorio\r\n        Divide el rango [0,1) en 6 partes iguales para las 6 direcciones\r\n        \"\"\"\r\n        if 0.0000 <= numero_aleatorio < 0.1667:  # ~1/6\r\n            return 'Norte', self.direcciones['Norte'], '↑'\r\n        elif 0.1667 <= numero_aleatorio < 0.3333:  # ~2/6\r\n            return 'Sur', self.direcciones['Sur'], '↓'\r\n        elif 0.3333 <= numero_aleatorio < 0.5000:  # ~3/6\r\n            return 'Este', self.direcciones['Este'], '→'\r\n        elif 0.5000 <= numero_aleatorio < 0.6667:  # ~4/6\r\n            return 'Oeste', self.direcciones['Oeste'], '←'\r\n        elif 0.6667 <= numero_aleatorio < 0.8333:  # ~5/6\r\n            return 'Arriba', self.direcciones['Arriba'], '⬆'\r\n        else:  # 0.8333 <= numero_aleatorio < 1.0000  # ~6/6\r\n            return 'Abajo', self.direcciones['Abajo'], '⬇'\r\n\r\n    def simular_caminata_3d(self, numeros_aleatorios, posicion_inicial_x=0, posicion_inicial_y=0, posicion_inicial_z=0, num_pasos=None):\r\n        \"\"\"Simula la caminata aleatoria de la rana en 3D\"\"\"\r\n        if num_pasos is None:\r\n            num_pasos = len(numeros_aleatorios)\r\n\r\n        # Usar solo los primeros num_pasos números\r\n        numeros_a_usar = numeros_aleatorios[:num_pasos]\r\n\r\n        print(f\"\\n=== SIMULACIÓN DE CAMINATA ALEATORIA 3D ===\")\r\n        print(f\"Posición inicial: ({posicion_inicial_x}, {posicion_inicial_y}, {posicion_inicial_z})\")\r\n        print(f\"Direcciones posibles: Norte(↑), Sur(↓), Este(→), Oeste(←), Arriba(⬆), Abajo(⬇)\")\r\n        print(f\"Probabilidad por dirección: ~16.67% cada una\")\r\n        print(f\"Número de pasos a simular: {num_pasos}\")\r\n        print(f\"Números disponibles: {len(numeros_aleatorios)}\")\r\n\r\n        # Listas para almacenar las posiciones\r\n        posiciones_x = [posicion_inicial_x]\r\n        posiciones_y = [posicion_inicial_y]\r\n        posiciones_z = [posicion_inicial_z]\r\n\r\n        # Posición actual\r\n        x_actual = posicion_inicial_x\r\n        y_actual = posicion_inicial_y\r\n        z_actual = posicion_inicial_z\r\n\r\n        # Estadísticas de movimiento\r\n        conteo_direcciones = {'Norte': 0, 'Sur': 0, 'Este': 0, 'Oeste': 0, 'Arriba': 0, 'Abajo': 0}\r\n\r\n        print(\"\\nPasos de la rana:\")\r\n        print(\"Paso | Número   | Dirección | Mov | Posición (X, Y, Z)\")\r\n        print(\"-\" * 55)\r\n\r\n        for i, numero in enumerate(numeros_a_usar):\r\n            direccion_nombre, (dx, dy, dz), simbolo = self.determinar_direccion(numero)\r\n\r\n            # Actualizar posición\r\n            x_actual += dx\r\n            y_actual += dy\r\n            z_actual += dz\r\n\r\n            # Guardar nueva posición\r\n            posiciones_x.append(x_actual)\r\n            posiciones_y.append(y_actual)\r\n            posiciones_z.append(z_actual)\r\n\r\n            # Contar dirección\r\n            conteo_direcciones[direccion_nombre] += 1\r\n\r\n            print(f\"{i+1:4d} | {numero:.5f} | {direccion_nombre:9s} | {simbolo:3s} | ({x_actual:3d}, {y_actual:3d}, {z_actual:3d})\")\r\n\r\n        return posiciones_x, posiciones_y, posiciones_z, conteo_direcciones\r\n\r\n    def graficar_caminata_3d(self, posiciones_x, posiciones_y, posiciones_z, conteo_direcciones):\r\n        \"\"\"Grafica la trayectoria de la rana en 3D\"\"\"\r\n        fig = plt.figure(figsize=(16, 6))\r\n\r\n        # Gráfico 1: Trayectoria 3D\r\n        ax1 = fig.add_subplot(121, projection='3d')\r\n\r\n        # Línea de trayectoria\r\n        ax1.plot(posiciones_x, posiciones_y, posiciones_z, 'b-', linewidth=2, alpha=0.7)\r\n\r\n        # Puntos coloreados por tiempo\r\n        scatter = ax1.scatter(posiciones_x, posiciones_y, posiciones_z,\r\n                              c=range(len(posiciones_x)), cmap='viridis',\r\n                              s=30, alpha=0.8, edgecolors='black', linewidth=0.5)\r\n\r\n        # Marcar inicio y fin\r\n        ax1.scatter(posiciones_x[0], posiciones_y[0], posiciones_z[0],\r\n                    c='green', s=200, marker='s', label='Inicio',\r\n                    edgecolors='black', linewidth=2)\r\n        ax1.scatter(posiciones_x[-1], posiciones_y[-1], posiciones_z[-1],\r\n                    c='red', s=200, marker='X', label='Final',\r\n                    edgecolors='black', linewidth=2)\r\n\r\n        # Planos de referencia en el origen\r\n        max_range = max(max(posiciones_x) - min(posiciones_x),\r\n                        max(posiciones_y) - min(posiciones_y),\r\n                        max(posiciones_z) - min(posiciones_z))\r\n\r\n        # Líneas de referencia\r\n        ax1.plot([0, 0], [0, 0], [-max_range//2, max_range//2], 'k--', alpha=0.3)\r\n        ax1.plot([0, 0], [-max_range//2, max_range//2], [0, 0], 'k--', alpha=0.3)\r\n        ax1.plot([-max_range//2, max_range//2], [0, 0], [0, 0], 'k--', alpha=0.3)\r\n\r\n        ax1.set_xlabel('Posición X')\r\n        ax1.set_ylabel('Posición Y')\r\n        ax1.set_zlabel('Posición Z')\r\n        ax1.set_title('Caminata Aleatoria 3D de una Rana')\r\n        ax1.legend()\r\n\r\n        # Barra de color\r\n        plt.colorbar(scatter, ax=ax1, label='Paso temporal', shrink=0.8)\r\n\r\n        # Gráfico 2: Distribución de direcciones\r\n        ax2 = fig.add_subplot(122)\r\n\r\n        direcciones = list(conteo_direcciones.keys())\r\n        conteos = list(conteo_direcciones.values())\r\n        colores = ['lightblue', 'lightcoral', 'lightgreen', 'lightyellow', 'lightpink', 'lightgray']\r\n        simbolos = ['↑', '↓', '→', '←', '⬆', '⬇']\r\n\r\n        barras = ax2.bar(direcciones, conteos, color=colores, edgecolor='black', linewidth=1)\r\n\r\n        # Agregar símbolos y valores en las barras\r\n        for i, (barra, simbolo, valor) in enumerate(zip(barras, simbolos, conteos)):\r\n            height = barra.get_height()\r\n            ax2.text(barra.get_x() + barra.get_width()/2., height + 0.1,\r\n                     f'{simbolo}\\n{valor}', ha='center', va='bottom', fontsize=10, fontweight='bold')\r\n\r\n        ax2.set_ylabel('Número de Movimientos')\r\n        ax2.set_title('Distribución de Direcciones 3D')\r\n        ax2.grid(True, alpha=0.3, axis='y')\r\n        plt.xticks(rotation=45)\r\n\r\n        # Línea de referencia para distribución uniforme\r\n        if sum(conteos) > 0:\r\n            promedio = sum(conteos) / 6\r\n            ax2.axhline(y=promedio, color='red', linestyle='--',\r\n                        label=f'Distribución uniforme ({promedio:.1f})', alpha=0.7)\r\n            ax2.legend()\r\n\r\n        plt.tight_layout()\r\n        plt.show()\r\n\r\n        # Crear gráficos adicionales de proyecciones\r\n        self.graficar_proyecciones_3d(posiciones_x, posiciones_y, posiciones_z)\r\n\r\n        # Estadísticas de la caminata\r\n        self.mostrar_estadisticas_3d(posiciones_x, posiciones_y, posiciones_z, conteo_direcciones)\r\n\r\n    def graficar_proyecciones_3d(self, posiciones_x, posiciones_y, posiciones_z):\r\n        \"\"\"Grafica las proyecciones de la caminata 3D en los planos XY, XZ, YZ\"\"\"\r\n        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))\r\n\r\n        # Proyección XY (vista desde arriba)\r\n        ax1.plot(posiciones_x, posiciones_y, 'b-', linewidth=2, alpha=0.7)\r\n        ax1.scatter(posiciones_x, posiciones_y, c=range(len(posiciones_x)),\r\n                    cmap='viridis', s=20, alpha=0.8)\r\n        ax1.scatter(posiciones_x[0], posiciones_y[0], c='green', s=100, marker='s', label='Inicio')\r\n        ax1.scatter(posiciones_x[-1], posiciones_y[-1], c='red', s=100, marker='X', label='Final')\r\n        ax1.set_xlabel('Posición X')\r\n        ax1.set_ylabel('Posición Y')\r\n        ax1.set_title('Proyección XY (Vista desde arriba)')\r\n        ax1.grid(True, alpha=0.3)\r\n        ax1.legend()\r\n        ax1.set_aspect('equal', adjustable='box')\r\n\r\n        # Proyección XZ (vista desde el lado Y)\r\n        ax2.plot(posiciones_x, posiciones_z, 'g-', linewidth=2, alpha=0.7)\r\n        ax2.scatter(posiciones_x, posiciones_z, c=range(len(posiciones_x)),\r\n                    cmap='viridis', s=20, alpha=0.8)\r\n        ax2.scatter(posiciones_x[0], posiciones_z[0], c='green', s=100, marker='s', label='Inicio')\r\n        ax2.scatter(posiciones_x[-1], posiciones_z[-1], c='red', s=100, marker='X', label='Final')\r\n        ax2.set_xlabel('Posición X')\r\n        ax2.set_ylabel('Posición Z')\r\n        ax2.set_title('Proyección XZ (Vista desde el lado)')\r\n        ax2.grid(True, alpha=0.3)\r\n        ax2.legend()\r\n        ax2.set_aspect('equal', adjustable='box')\r\n\r\n        # Proyección YZ (vista desde el lado X)\r\n        ax3.plot(posiciones_y, posiciones_z, 'r-', linewidth=2, alpha=0.7)\r\n        ax3.scatter(posiciones_y, posiciones_z, c=range(len(posiciones_y)),\r\n                    cmap='viridis', s=20, alpha=0.8)\r\n        ax3.scatter(posiciones_y[0], posiciones_z[0], c='green', s=100, marker='s', label='Inicio')\r\n        ax3.scatter(posiciones_y[-1], posiciones_z[-1], c='red', s=100, marker='X', label='Final')\r\n        ax3.set_xlabel('Posición Y')\r\n        ax3.set_ylabel('Posición Z')\r\n        ax3.set_title('Proyección YZ (Vista frontal)')\r\n        ax3.grid(True, alpha=0.3)\r\n        ax3.legend()\r\n        ax3.set_aspect('equal', adjustable='box')\r\n\r\n        # Gráfico de evolución temporal de coordenadas\r\n        pasos = range(len(posiciones_x))\r\n        ax4.plot(pasos, posiciones_x, 'r-', label='X', linewidth=2)\r\n        ax4.plot(pasos, posiciones_y, 'g-', label='Y', linewidth=2)\r\n        ax4.plot(pasos, posiciones_z, 'b-', label='Z', linewidth=2)\r\n        ax4.set_xlabel('Número de Paso')\r\n        ax4.set_ylabel('Posición')\r\n        ax4.set_title('Evolución Temporal de Coordenadas')\r\n        ax4.grid(True, alpha=0.3)\r\n        ax4.legend()\r\n\r\n        plt.tight_layout()\r\n        plt.show()\r\n\r\n    def mostrar_estadisticas_3d(self, posiciones_x, posiciones_y, posiciones_z, conteo_direcciones):\r\n        \"\"\"Muestra estadísticas detalladas de la caminata 3D\"\"\"\r\n        print(f\"\\n\uD83D\uDCC8 ESTADÍSTICAS DE LA CAMINATA 3D:\")\r\n\r\n        # Posiciones\r\n        print(f\"  Posición inicial: ({posiciones_x[0]}, {posiciones_y[0]}, {posiciones_z[0]})\")\r\n        print(f\"  Posición final: ({posiciones_x[-1]}, {posiciones_y[-1]}, {posiciones_z[-1]})\")\r\n\r\n        # Desplazamientos\r\n        dx_total = posiciones_x[-1] - posiciones_x[0]\r\n        dy_total = posiciones_y[-1] - posiciones_y[0]\r\n        dz_total = posiciones_z[-1] - posiciones_z[0]\r\n        distancia_euclidiana = np.sqrt(dx_total**2 + dy_total**2 + dz_total**2)\r\n\r\n        print(f\"  Desplazamiento neto: ({dx_total:+d}, {dy_total:+d}, {dz_total:+d})\")\r\n        print(f\"  Distancia euclidiana del origen: {distancia_euclidiana:.2f}\")\r\n\r\n        # Rangos\r\n        rango_x = (min(posiciones_x), max(posiciones_x))\r\n        rango_y = (min(posiciones_y), max(posiciones_y))\r\n        rango_z = (min(posiciones_z), max(posiciones_z))\r\n        volumen_explorado = (rango_x[1] - rango_x[0] + 1) * (rango_y[1] - rango_y[0] + 1) * (rango_z[1] - rango_z[0] + 1)\r\n\r\n        print(f\"  Rango X: [{rango_x[0]}, {rango_x[1]}] (amplitud: {rango_x[1] - rango_x[0] + 1})\")\r\n        print(f\"  Rango Y: [{rango_y[0]}, {rango_y[1]}] (amplitud: {rango_y[1] - rango_y[0] + 1})\")\r\n        print(f\"  Rango Z: [{rango_z[0]}, {rango_z[1]}] (amplitud: {rango_z[1] - rango_z[0] + 1})\")\r\n        print(f\"  Volumen explorado: {volumen_explorado} unidades cúbicas\")\r\n\r\n        # Distancias en proyecciones\r\n        dist_xy = np.sqrt(dx_total**2 + dy_total**2)\r\n        dist_xz = np.sqrt(dx_total**2 + dz_total**2)\r\n        dist_yz = np.sqrt(dy_total**2 + dz_total**2)\r\n\r\n        print(f\"\\nDISTANCIAS EN PROYECCIONES:\")\r\n        print(f\"  Distancia XY: {dist_xy:.2f}\")\r\n        print(f\"  Distancia XZ: {dist_xz:.2f}\")\r\n        print(f\"  Distancia YZ: {dist_yz:.2f}\")\r\n\r\n        # Distribución de direcciones\r\n        total_pasos = sum(conteo_direcciones.values())\r\n        print(f\"\\nDISTRIBUCIÓN DE DIRECCIONES 3D:\")\r\n        simbolos_dict = {'Norte': '↑', 'Sur': '↓', 'Este': '→', 'Oeste': '←', 'Arriba': '⬆', 'Abajo': '⬇'}\r\n\r\n        for direccion, count in conteo_direcciones.items():\r\n            porcentaje = (count / total_pasos) * 100 if total_pasos > 0 else 0\r\n            simbolo = simbolos_dict[direccion]\r\n            print(f\"  {direccion:6s} {simbolo}: {count:3d} pasos ({porcentaje:5.1f}%)\")\r\n\r\n        print(f\"  Total de pasos: {total_pasos}\")\r\n\r\n        # Análisis de simetría\r\n        print(f\"\\n⚖ANÁLISIS DE SIMETRÍA:\")\r\n        mov_horizontal = conteo_direcciones['Norte'] + conteo_direcciones['Sur'] + conteo_direcciones['Este'] + conteo_direcciones['Oeste']\r\n        mov_vertical = conteo_direcciones['Arriba'] + conteo_direcciones['Abajo']\r\n\r\n        if total_pasos > 0:\r\n            print(f\"  Movimientos horizontales (N,S,E,O): {mov_horizontal} ({(mov_horizontal/total_pasos)*100:.1f}%)\")\r\n            print(f\"  Movimientos verticales (⬆,⬇): {mov_vertical} ({(mov_vertical/total_pasos)*100:.1f}%)\")\r\n\r\n    def ejecutar_simulacion(self):\r\n        \"\"\"Función principal que ejecuta toda la simulación\"\"\"\r\n        try:\r\n            x_o, k, c, g, n = self.obtener_parametros_generacion()\r\n\r\n            print(f\"\\nGenerando {n} números pseudoaleatorios...\")\r\n            df = generar(x_o, k, c, g, n)\r\n            numeros = df['Ri'].tolist()\r\n            print(f\"Números generados exitosamente\")\r\n            print(f\"Primeros 5 números: {numeros[:5]}\")\r\n\r\n            pruebas, alpha = self.configurar_pruebas()\r\n\r\n            if any(pruebas.values()):\r\n                print(f\"\\nEjecutando pruebas estadísticas...\")\r\n                resultados = self.ejecutar_pruebas(numeros, pruebas, alpha)\r\n\r\n                # Mostrar resultados\r\n                todas_pasaron = self.mostrar_resultados_pruebas(resultados)\r\n\r\n                if not todas_pasaron:\r\n                    print(\"\\n⚠ADVERTENCIA: No todos los números pasaron las pruebas estadísticas\")\r\n                    continuar = input(\"¿Desea continuar con la simulación de todos modos? (s/n): \")\r\n                    if not continuar.lower().startswith('s'):\r\n                        print(\"Simulación cancelada. Intente con otros parámetros.\")\r\n                        return\r\n            else:\r\n                print(\"No se ejecutaron pruebas estadísticas\")\r\n                continuar = input(\"¿Desea continuar sin pruebas? (s/n): \")\r\n                if not continuar.lower().startswith('s'):\r\n                    return\r\n\r\n            print(f\"\\nIniciando simulación de caminata aleatoria 3D...\")\r\n            posicion_inicial_x = int(input(\"Posición inicial X (0): \") or \"0\")\r\n            posicion_inicial_y = int(input(\"Posición inicial Y (0): \") or \"0\")\r\n            posicion_inicial_z = int(input(\"Posición inicial Z (0): \") or \"0\")\r\n\r\n            num_pasos = self.obtener_numero_pasos(len(numeros))\r\n\r\n            posiciones_x, posiciones_y, posiciones_z, conteo_direcciones = self.simular_caminata_3d(\r\n                numeros, posicion_inicial_x, posicion_inicial_y, posicion_inicial_z, num_pasos\r\n            )\r\n\r\n            print(f\"\\nGenerando gráficas...\")\r\n            self.graficar_caminata_3d(posiciones_x, posiciones_y, posiciones_z, conteo_direcciones)\r\n\r\n            print(f\"\\nSimulación 3D completada exitosamente!\")\r\n\r\n        except KeyboardInterrupt:\r\n            print(\"\\n\\n⚠Simulación interrumpida por el usuario\")\r\n        except Exception as e:\r\n            print(f\"\\nError inesperado: {e}\")\r\n\r\ndef main():\r\n    simulador = CaminataAleatoria3D()\r\n    simulador.ejecutar_simulacion()\r\n\r\nif __name__ == \"__main__\":\r\n    main()
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/CaminataAleatoria3D.py b/code/CaminataAleatoria3D.py
+--- a/code/CaminataAleatoria3D.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ b/code/CaminataAleatoria3D.py	(date 1758379792642)
+@@ -1,21 +1,18 @@
+-import json
+-import matplotlib.pyplot as plt
+-from mpl_toolkits.mplot3d import Axes3D
+-import numpy as np
+-import sys
+-import os
+-
+-from pruebas.Generador import generar
++import json                         # Manejo de archivos JSON (guardar/cargar datos estructurados)
++import time                         # Medir tiempos de ejecución
++import matplotlib.pyplot as plt     # Generar gráficas (histogramas, caminatas)
++import numpy as np                  # Operaciones matemáticas y estadísticas
+ 
+-from pruebas.prueba_de_medias import prueba_de_medias
+-from pruebas.prueba_de_varianza import prueba_de_varianza
+-from pruebas.prueba_chi2_2 import prueba_chi_cuadrado
+-from pruebas.ks import kolmogorov_smirnov_test
+-from pruebas.poker import poker_test_json
+-from pruebas.rachas import prueba_rachas
+-
++from pruebas.Generador import generar                           # Generador de numeros pseudoaleatorios, metodo Congruencia lineal
++from pruebas.prueba_de_medias import prueba_de_medias           # Prueba estadistica de medias
++from pruebas.prueba_de_varianza import prueba_de_varianza       # Prueba de varianza
++from pruebas.prueba_chi2_2 import prueba_chi_cuadrado           # Prueba de chi-cuadrado
++from pruebas.ks import kolmogorov_smirnov_test                  # Prueba de Kolmogorov-Smirnov
++from pruebas.poker import poker_test_json                       # Prueba de poker
++from pruebas.rachas import prueba_rachas                        # Prueba de rachas
++# Clase para simular la caminata aleatoria de una rana en 3D
++# Movimientos posibles: Norte, Sur, Este, Oeste (6 direcciones)
+ class CaminataAleatoria3D:
+-
+     def __init__(self):
+         self.direcciones = {
+             'Norte': (0, 1, 0),    # ↑ (Y+)
+@@ -27,7 +24,6 @@
+         }
+         self.nombres_direcciones = ['Norte', 'Sur', 'Este', 'Oeste', 'Arriba', 'Abajo']
+         self.simbolos_direcciones = ['↑', '↓', '→', '←', '⬆', '⬇']
+-
+         # Diccionario de pruebas disponibles
+         self.PRUEBAS_DISPONIBLES = {
+             "medias": prueba_de_medias,
+@@ -37,60 +33,60 @@
+             "poker": poker_test_json,
+             "rachas": prueba_rachas
+         }
+-
+-    def obtener_parametros_generacion(self):
+-        """Obtiene los parámetros del usuario para la generación de números"""
++    # Obtiene los parámetros del usuario para la generación de números
++    # Pide al usuario: x_o: semilla inicial. k, c, g: parámetros del GCL. n: cantidad de números
++    # se recomienda que la semilla se impar que k y c tambien sean impar y que g sea un numero muy grande y par
++    # n define la cantidad de numeros que se van a generar
++    # Retorna esos valores como tupla.
++    def obtener_parametros(self):
+         print("SIMULADOR DE CAMINATA ALEATORIA 3D")
+         print("=" * 50)
+         print("=== GENERACIÓN DE NÚMEROS PSEUDOALEATORIOS ===")
+         print("Ingrese los parámetros para el generador congruencial lineal:")
+-
+         try:
+             x_o = int(input("Semilla inicial (x_0): "))
+             k = int(input("Parámetro k: "))
+             c = int(input("Constante aditiva (c): "))
+             g = int(input("Exponente de módulo (g) donde m = 2^g: "))
+             n = int(input("Cantidad de números a generar: "))
+-
+             if n < 10:
+                 print("Advertencia: Se recomienda al menos 10 números para las pruebas estadísticas")
+-
+             return x_o, k, c, g, n
+         except ValueError:
+             print("Error: Ingrese solo números enteros")
+-            return self.obtener_parametros_generacion()
+-
++            return self.obtener_parametros()
++    #Configura las pruebas estadísticas a ejecutar pregunta al usuario qué pruebas quiere correr
++    # Devuelve un diccionario con las pruebas elegidas
++    # alpha es nivel de significancia el nivel preestablecido  es 0.05
++    # en la prueba de chi-cuadrados se recomienda dejar un intervalo k de 8 y la de kolmogorov dejar un intervalo k de 10
+     def configurar_pruebas(self):
+         print("\n=== CONFIGURACIÓN DE PRUEBAS ESTADÍSTICAS ===")
+         print("¿Qué pruebas desea ejecutar? (s/n)")
+-
+         pruebas = {}
+         # Pruebas básicas
+         pruebas["medias"] = input("Prueba de Medias (s/n): ").lower().startswith('s')
+         pruebas["varianza"] = input("Prueba de Varianza (s/n): ").lower().startswith('s')
+         pruebas["rachas"] = input("Prueba de Rachas (s/n): ").lower().startswith('s')
+         pruebas["poker"] = input("Prueba de Póker (s/n): ").lower().startswith('s')
+-
+         # Pruebas con parámetros
+         if input("Prueba Chi-Cuadrado (s/n): ").lower().startswith('s'):
+             k = int(input("  Número de intervalos (k): "))
+             pruebas["chi"] = {"k": k}
+         else:
+             pruebas["chi"] = False
+-
+         if input("Prueba Kolmogorov-Smirnov (s/n): ").lower().startswith('s'):
+             k = int(input("  Número de intervalos (k): "))
+             pruebas["kolmogorov"] = {"k": k}
+         else:
+             pruebas["kolmogorov"] = False
+-
+         # Nivel de significancia
+         alpha = float(input("Nivel de significancia (alpha, ej: 0.05): ") or "0.05")
+-
+         return pruebas, alpha
+-
++    # Ejecuta las pruebas estadísticas seleccionadas
++    # El parametro datos es la lista de números pseudoaleatorios.
++    # El parametro pruebas es el diccionario con las pruebas activadas o desactivadas
++    # alpha es el nivel de significancia y Retorna un diccionario con resultados
+     def ejecutar_pruebas(self, datos, pruebas, alpha):
+-        """Ejecuta las pruebas estadísticas seleccionadas"""
+         resultados = {}
+         for nombre, info in pruebas.items():
+             if nombre == "kolmogorov" and info != False and nombre in self.PRUEBAS_DISPONIBLES:
+@@ -100,29 +96,24 @@
+             elif info and nombre in self.PRUEBAS_DISPONIBLES:
+                 resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)
+         return resultados
+-
++    # Muestra los resultados de las pruebas estadísticas Procesa cada resultado
++    # Informa si cada prueba pasó o no y Devuelve True si todas pasaron imprime un estatus de que pruebas fallaron y cuales pasaron
+     def mostrar_resultados_pruebas(self, resultados):
+-        """Muestra los resultados de las pruebas estadísticas"""
+         print("\n=== RESULTADOS DE PRUEBAS ESTADÍSTICAS ===")
+-
+         pruebas_pasadas = 0
+         total_pruebas = 0
+-
+         for nombre, resultado_json in resultados.items():
+             try:
+                 resultado = json.loads(resultado_json)
+                 total_pruebas += 1
+-
+                 aprobado = resultado.get("isApproved", "False").lower() == "true"
+                 if aprobado:
+                     pruebas_pasadas += 1
+                     status = "PASÓ"
+                 else:
+                     status = "NO PASÓ"
+-
+                 print(f"\n{resultado['test_name']}: {status}")
+                 print(f"  Decisión: {resultado['decision']}")
+-
+                 # Mostrar estadísticas clave según el tipo de prueba
+                 if 'statistics' in resultado:
+                     stats = resultado['statistics']
+@@ -135,16 +126,14 @@
+                     elif 'Chi2_calculado' in stats:
+                         print(f"  Chi² calculado: {stats['Chi2_calculado']:.4f}")
+                         print(f"  Valor crítico: {stats['critical_value']:.4f}")
+-
+             except json.JSONDecodeError:
+                 print(f"{nombre}: Error al procesar resultado")
+-
+         print(f"\nRESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
+-
+         return pruebas_pasadas == total_pruebas
+-
++    # Obtiene el número de pasos que el usuario quiere simular
++    # La variable max_pasos es la cantidad de numeros generados anteriormente
++    # Se asegura que esté entre 1 y max_pasos = (la cantidad maxima de numeros generados)
+     def obtener_numero_pasos(self, max_pasos):
+-        """Obtiene el número de pasos que el usuario quiere simular"""
+         while True:
+             try:
+                 pasos = int(input(f"¿Cuántos pasos quiere que dé la rana? (máximo {max_pasos}): "))
+@@ -154,12 +143,9 @@
+                     print(f"Error: El número de pasos debe estar entre 1 y {max_pasos}")
+             except ValueError:
+                 print("Error: Ingrese un número entero válido")
+-
++    # Determina la dirección de movimiento basada en el número aleatorio
++    # Divide el rango [0,1) en 6 partes iguales para las 6 direcciones
+     def determinar_direccion(self, numero_aleatorio):
+-        """
+-        Determina la dirección de movimiento basada en el número aleatorio
+-        Divide el rango [0,1) en 6 partes iguales para las 6 direcciones
+-        """
+         if 0.0000 <= numero_aleatorio < 0.1667:  # ~1/6
+             return 'Norte', self.direcciones['Norte'], '↑'
+         elif 0.1667 <= numero_aleatorio < 0.3333:  # ~2/6
+@@ -172,74 +158,56 @@
+             return 'Arriba', self.direcciones['Arriba'], '⬆'
+         else:  # 0.8333 <= numero_aleatorio < 1.0000  # ~6/6
+             return 'Abajo', self.direcciones['Abajo'], '⬇'
+-
++    # Simula la caminata aleatoria de la rana en 3D
+     def simular_caminata_3d(self, numeros_aleatorios, posicion_inicial_x=0, posicion_inicial_y=0, posicion_inicial_z=0, num_pasos=None):
+-        """Simula la caminata aleatoria de la rana en 3D"""
+         if num_pasos is None:
+             num_pasos = len(numeros_aleatorios)
+-
+         # Usar solo los primeros num_pasos números
+         numeros_a_usar = numeros_aleatorios[:num_pasos]
+-
+         print(f"\n=== SIMULACIÓN DE CAMINATA ALEATORIA 3D ===")
+         print(f"Posición inicial: ({posicion_inicial_x}, {posicion_inicial_y}, {posicion_inicial_z})")
+         print(f"Direcciones posibles: Norte(↑), Sur(↓), Este(→), Oeste(←), Arriba(⬆), Abajo(⬇)")
+         print(f"Probabilidad por dirección: ~16.67% cada una")
+         print(f"Número de pasos a simular: {num_pasos}")
+         print(f"Números disponibles: {len(numeros_aleatorios)}")
+-
+         # Listas para almacenar las posiciones
+         posiciones_x = [posicion_inicial_x]
+         posiciones_y = [posicion_inicial_y]
+         posiciones_z = [posicion_inicial_z]
+-
+         # Posición actual
+         x_actual = posicion_inicial_x
+         y_actual = posicion_inicial_y
+         z_actual = posicion_inicial_z
+-
+         # Estadísticas de movimiento
+         conteo_direcciones = {'Norte': 0, 'Sur': 0, 'Este': 0, 'Oeste': 0, 'Arriba': 0, 'Abajo': 0}
+-
+         print("\nPasos de la rana:")
+         print("Paso | Número   | Dirección | Mov | Posición (X, Y, Z)")
+         print("-" * 55)
+-
+         for i, numero in enumerate(numeros_a_usar):
+             direccion_nombre, (dx, dy, dz), simbolo = self.determinar_direccion(numero)
+-
+             # Actualizar posición
+             x_actual += dx
+             y_actual += dy
+             z_actual += dz
+-
+             # Guardar nueva posición
+             posiciones_x.append(x_actual)
+             posiciones_y.append(y_actual)
+             posiciones_z.append(z_actual)
+-
+             # Contar dirección
+             conteo_direcciones[direccion_nombre] += 1
+-
+             print(f"{i+1:4d} | {numero:.5f} | {direccion_nombre:9s} | {simbolo:3s} | ({x_actual:3d}, {y_actual:3d}, {z_actual:3d})")
+-
+         return posiciones_x, posiciones_y, posiciones_z, conteo_direcciones
+-
++    #Grafica la trayectoria de la rana en 3D
+     def graficar_caminata_3d(self, posiciones_x, posiciones_y, posiciones_z, conteo_direcciones):
+-        """Grafica la trayectoria de la rana en 3D"""
+         fig = plt.figure(figsize=(16, 6))
+-
+         # Gráfico 1: Trayectoria 3D
+         ax1 = fig.add_subplot(121, projection='3d')
+-
+         # Línea de trayectoria
+         ax1.plot(posiciones_x, posiciones_y, posiciones_z, 'b-', linewidth=2, alpha=0.7)
+-
+         # Puntos coloreados por tiempo
+         scatter = ax1.scatter(posiciones_x, posiciones_y, posiciones_z,
+                               c=range(len(posiciones_x)), cmap='viridis',
+                               s=30, alpha=0.8, edgecolors='black', linewidth=0.5)
+-
+         # Marcar inicio y fin
+         ax1.scatter(posiciones_x[0], posiciones_y[0], posiciones_z[0],
+                     c='green', s=200, marker='s', label='Inicio',
+@@ -247,201 +215,193 @@
+         ax1.scatter(posiciones_x[-1], posiciones_y[-1], posiciones_z[-1],
+                     c='red', s=200, marker='X', label='Final',
+                     edgecolors='black', linewidth=2)
+-
+         # Planos de referencia en el origen
+         max_range = max(max(posiciones_x) - min(posiciones_x),
+                         max(posiciones_y) - min(posiciones_y),
+                         max(posiciones_z) - min(posiciones_z))
+-
+         # Líneas de referencia
+         ax1.plot([0, 0], [0, 0], [-max_range//2, max_range//2], 'k--', alpha=0.3)
+         ax1.plot([0, 0], [-max_range//2, max_range//2], [0, 0], 'k--', alpha=0.3)
+         ax1.plot([-max_range//2, max_range//2], [0, 0], [0, 0], 'k--', alpha=0.3)
+-
+         ax1.set_xlabel('Posición X')
+         ax1.set_ylabel('Posición Y')
+         ax1.set_zlabel('Posición Z')
+         ax1.set_title('Caminata Aleatoria 3D de una Rana')
+         ax1.legend()
+-
+         # Barra de color
+         plt.colorbar(scatter, ax=ax1, label='Paso temporal', shrink=0.8)
+-
+         # Gráfico 2: Distribución de direcciones
+         ax2 = fig.add_subplot(122)
+-
+         direcciones = list(conteo_direcciones.keys())
+         conteos = list(conteo_direcciones.values())
+         colores = ['lightblue', 'lightcoral', 'lightgreen', 'lightyellow', 'lightpink', 'lightgray']
+         simbolos = ['↑', '↓', '→', '←', '⬆', '⬇']
+-
+         barras = ax2.bar(direcciones, conteos, color=colores, edgecolor='black', linewidth=1)
+-
+         # Agregar símbolos y valores en las barras
+         for i, (barra, simbolo, valor) in enumerate(zip(barras, simbolos, conteos)):
+             height = barra.get_height()
+             ax2.text(barra.get_x() + barra.get_width()/2., height + 0.1,
+                      f'{simbolo}\n{valor}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+-
+         ax2.set_ylabel('Número de Movimientos')
+         ax2.set_title('Distribución de Direcciones 3D')
+         ax2.grid(True, alpha=0.3, axis='y')
+         plt.xticks(rotation=45)
+-
+         # Línea de referencia para distribución uniforme
+         if sum(conteos) > 0:
+             promedio = sum(conteos) / 6
+             ax2.axhline(y=promedio, color='red', linestyle='--',
+                         label=f'Distribución uniforme ({promedio:.1f})', alpha=0.7)
+             ax2.legend()
+-
+         plt.tight_layout()
+         plt.show()
+-
+         # Crear gráficos adicionales de proyecciones
+         self.graficar_proyecciones_3d(posiciones_x, posiciones_y, posiciones_z)
+-
+         # Estadísticas de la caminata
+-        self.mostrar_estadisticas_3d(posiciones_x, posiciones_y, posiciones_z, conteo_direcciones)
+-
+-    def graficar_proyecciones_3d(self, posiciones_x, posiciones_y, posiciones_z):
+-        """Grafica las proyecciones de la caminata 3D en los planos XY, XZ, YZ"""
+-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))
+-
+-        # Proyección XY (vista desde arriba)
+-        ax1.plot(posiciones_x, posiciones_y, 'b-', linewidth=2, alpha=0.7)
+-        ax1.scatter(posiciones_x, posiciones_y, c=range(len(posiciones_x)),
+-                    cmap='viridis', s=20, alpha=0.8)
+-        ax1.scatter(posiciones_x[0], posiciones_y[0], c='green', s=100, marker='s', label='Inicio')
+-        ax1.scatter(posiciones_x[-1], posiciones_y[-1], c='red', s=100, marker='X', label='Final')
+-        ax1.set_xlabel('Posición X')
+-        ax1.set_ylabel('Posición Y')
+-        ax1.set_title('Proyección XY (Vista desde arriba)')
+-        ax1.grid(True, alpha=0.3)
+-        ax1.legend()
+-        ax1.set_aspect('equal', adjustable='box')
+-
+-        # Proyección XZ (vista desde el lado Y)
+-        ax2.plot(posiciones_x, posiciones_z, 'g-', linewidth=2, alpha=0.7)
+-        ax2.scatter(posiciones_x, posiciones_z, c=range(len(posiciones_x)),
+-                    cmap='viridis', s=20, alpha=0.8)
+-        ax2.scatter(posiciones_x[0], posiciones_z[0], c='green', s=100, marker='s', label='Inicio')
+-        ax2.scatter(posiciones_x[-1], posiciones_z[-1], c='red', s=100, marker='X', label='Final')
+-        ax2.set_xlabel('Posición X')
+-        ax2.set_ylabel('Posición Z')
+-        ax2.set_title('Proyección XZ (Vista desde el lado)')
+-        ax2.grid(True, alpha=0.3)
+-        ax2.legend()
+-        ax2.set_aspect('equal', adjustable='box')
+-
+-        # Proyección YZ (vista desde el lado X)
+-        ax3.plot(posiciones_y, posiciones_z, 'r-', linewidth=2, alpha=0.7)
+-        ax3.scatter(posiciones_y, posiciones_z, c=range(len(posiciones_y)),
+-                    cmap='viridis', s=20, alpha=0.8)
+-        ax3.scatter(posiciones_y[0], posiciones_z[0], c='green', s=100, marker='s', label='Inicio')
+-        ax3.scatter(posiciones_y[-1], posiciones_z[-1], c='red', s=100, marker='X', label='Final')
+-        ax3.set_xlabel('Posición Y')
+-        ax3.set_ylabel('Posición Z')
+-        ax3.set_title('Proyección YZ (Vista frontal)')
+-        ax3.grid(True, alpha=0.3)
+-        ax3.legend()
+-        ax3.set_aspect('equal', adjustable='box')
+ 
+-        # Gráfico de evolución temporal de coordenadas
+-        pasos = range(len(posiciones_x))
+-        ax4.plot(pasos, posiciones_x, 'r-', label='X', linewidth=2)
+-        ax4.plot(pasos, posiciones_y, 'g-', label='Y', linewidth=2)
+-        ax4.plot(pasos, posiciones_z, 'b-', label='Z', linewidth=2)
+-        ax4.set_xlabel('Número de Paso')
+-        ax4.set_ylabel('Posición')
+-        ax4.set_title('Evolución Temporal de Coordenadas')
+-        ax4.grid(True, alpha=0.3)
+-        ax4.legend()
+-
+-        plt.tight_layout()
+-        plt.show()
+-
++    # Muestra estadísticas detalladas de la caminata 3D
+     def mostrar_estadisticas_3d(self, posiciones_x, posiciones_y, posiciones_z, conteo_direcciones):
+-        """Muestra estadísticas detalladas de la caminata 3D"""
+-        print(f"\n📈 ESTADÍSTICAS DE LA CAMINATA 3D:")
+-
++        print(f"\nESTADÍSTICAS DE LA CAMINATA 3D:")
+         # Posiciones
+         print(f"  Posición inicial: ({posiciones_x[0]}, {posiciones_y[0]}, {posiciones_z[0]})")
+         print(f"  Posición final: ({posiciones_x[-1]}, {posiciones_y[-1]}, {posiciones_z[-1]})")
+-
+         # Desplazamientos
+         dx_total = posiciones_x[-1] - posiciones_x[0]
+         dy_total = posiciones_y[-1] - posiciones_y[0]
+         dz_total = posiciones_z[-1] - posiciones_z[0]
+         distancia_euclidiana = np.sqrt(dx_total**2 + dy_total**2 + dz_total**2)
+-
+         print(f"  Desplazamiento neto: ({dx_total:+d}, {dy_total:+d}, {dz_total:+d})")
+         print(f"  Distancia euclidiana del origen: {distancia_euclidiana:.2f}")
+-
+         # Rangos
+         rango_x = (min(posiciones_x), max(posiciones_x))
+         rango_y = (min(posiciones_y), max(posiciones_y))
+         rango_z = (min(posiciones_z), max(posiciones_z))
+         volumen_explorado = (rango_x[1] - rango_x[0] + 1) * (rango_y[1] - rango_y[0] + 1) * (rango_z[1] - rango_z[0] + 1)
+-
+         print(f"  Rango X: [{rango_x[0]}, {rango_x[1]}] (amplitud: {rango_x[1] - rango_x[0] + 1})")
+         print(f"  Rango Y: [{rango_y[0]}, {rango_y[1]}] (amplitud: {rango_y[1] - rango_y[0] + 1})")
+         print(f"  Rango Z: [{rango_z[0]}, {rango_z[1]}] (amplitud: {rango_z[1] - rango_z[0] + 1})")
+         print(f"  Volumen explorado: {volumen_explorado} unidades cúbicas")
+-
+         # Distancias en proyecciones
+         dist_xy = np.sqrt(dx_total**2 + dy_total**2)
+         dist_xz = np.sqrt(dx_total**2 + dz_total**2)
+         dist_yz = np.sqrt(dy_total**2 + dz_total**2)
+-
+         print(f"\nDISTANCIAS EN PROYECCIONES:")
+         print(f"  Distancia XY: {dist_xy:.2f}")
+         print(f"  Distancia XZ: {dist_xz:.2f}")
+         print(f"  Distancia YZ: {dist_yz:.2f}")
+-
+         # Distribución de direcciones
+         total_pasos = sum(conteo_direcciones.values())
+         print(f"\nDISTRIBUCIÓN DE DIRECCIONES 3D:")
+         simbolos_dict = {'Norte': '↑', 'Sur': '↓', 'Este': '→', 'Oeste': '←', 'Arriba': '⬆', 'Abajo': '⬇'}
+-
+         for direccion, count in conteo_direcciones.items():
+             porcentaje = (count / total_pasos) * 100 if total_pasos > 0 else 0
+             simbolo = simbolos_dict[direccion]
+             print(f"  {direccion:6s} {simbolo}: {count:3d} pasos ({porcentaje:5.1f}%)")
+-
+         print(f"  Total de pasos: {total_pasos}")
+ 
+         # Análisis de simetría
+-        print(f"\n⚖ANÁLISIS DE SIMETRÍA:")
++        print(f"\nANÁLISIS DE SIMETRÍA:")
+         mov_horizontal = conteo_direcciones['Norte'] + conteo_direcciones['Sur'] + conteo_direcciones['Este'] + conteo_direcciones['Oeste']
+         mov_vertical = conteo_direcciones['Arriba'] + conteo_direcciones['Abajo']
+-
+         if total_pasos > 0:
+             print(f"  Movimientos horizontales (N,S,E,O): {mov_horizontal} ({(mov_horizontal/total_pasos)*100:.1f}%)")
+             print(f"  Movimientos verticales (⬆,⬇): {mov_vertical} ({(mov_vertical/total_pasos)*100:.1f}%)")
++    # Permite al usuario verificar si la rana pasó por una coordenada específica en 3D
++    def verificar_coordenada_3d(self, posiciones_x, posiciones_y, posiciones_z):
++        print("\nVERIFICADOR DE COORDENADAS 3D")
++        print("=" * 45)
++        while True:
++            try:
++                # Obtener coordenada del usuario
++                x_buscar = int(input("Ingrese coordenada X a verificar (o 'q' para salir): "))
++                y_buscar = int(input("Ingrese coordenada Y a verificar: "))
++                z_buscar = int(input("Ingrese coordenada Z a verificar: "))
++                # Buscar la coordenada en la trayectoria
++                pasos_encontrados = []
++                for i, (x, y, z) in enumerate(zip(posiciones_x, posiciones_y, posiciones_z)):
++                    if x == x_buscar and y == y_buscar and z == z_buscar:
++                        pasos_encontrados.append(i)
++                if pasos_encontrados:
++                    print(f"\n¡SÍ! La rana pasó por ({x_buscar}, {y_buscar}, {z_buscar})")
++                    if len(pasos_encontrados) == 1:
++                        if pasos_encontrados[0] == 0:
++                            print(f"Posición inicial")
++                        else:
++                            print(f"En el paso: {pasos_encontrados[0]}")
++                    else:
++                        print(f"Pasó {len(pasos_encontrados)} veces:")
++                        for paso in pasos_encontrados:
++                            if paso == 0:
++                                print(f"      - Posición inicial")
++                            else:
++                                print(f"      - Paso {paso}")
++                    # Mostrar contexto (pasos anteriores y posteriores)
++                    if pasos_encontrados[0] > 0:
++                        paso_principal = pasos_encontrados[0]
++                        print(f"\n🔍 Contexto del paso {paso_principal}:")
++                        # Paso anterior
++                        if paso_principal > 0:
++                            x_ant = posiciones_x[paso_principal - 1]
++                            y_ant = posiciones_y[paso_principal - 1]
++                            z_ant = posiciones_z[paso_principal - 1]
++                            print(f"   Anterior: ({x_ant}, {y_ant}, {z_ant}) → ({x_buscar}, {y_buscar}, {z_buscar})")
++                        # Paso posterior
++                        if paso_principal < len(posiciones_x) - 1:
++                            x_post = posiciones_x[paso_principal + 1]
++                            y_post = posiciones_y[paso_principal + 1]
++                            z_post = posiciones_z[paso_principal + 1]
++                            print(f"   Posterior: ({x_buscar}, {y_buscar}, {z_buscar}) → ({x_post}, {y_post}, {z_post})")
++                else:
++                    print(f"\nNO. La rana nunca pasó por ({x_buscar}, {y_buscar}, {z_buscar})")
++                    # Encontrar la coordenada más cercana
++                    distancias = []
++                    for x, y, z in zip(posiciones_x, posiciones_y, posiciones_z):
++                        # Distancia Manhattan 3D
++                        distancia = abs(x - x_buscar) + abs(y - y_buscar) + abs(z - z_buscar)
++                        distancias.append(distancia)
++                    min_distancia = min(distancias)
++                    indices_cercanos = [i for i, d in enumerate(distancias) if d == min_distancia]
+ 
++                    print(f"\nCoordenada(s) más cercana(s) (distancia Manhattan 3D: {min_distancia}):")
++                    for idx in indices_cercanos[:3]:  # Mostrar máximo 3
++                        x_cercano = posiciones_x[idx]
++                        y_cercano = posiciones_y[idx]
++                        z_cercano = posiciones_z[idx]
++                        if idx == 0:
++                            print(f"   ({x_cercano}, {y_cercano}, {z_cercano}) - Posición inicial")
++                        else:
++                            print(f"   ({x_cercano}, {y_cercano}, {z_cercano}) - Paso {idx}")
++                # Preguntar si quiere verificar otra coordenada
++                continuar = input("\n¿Verificar otra coordenada? (s/n): ").lower()
++                if not continuar.startswith('s'):
++                    break
++            except ValueError:
++                print("Error: Ingrese números enteros válidos")
++            except KeyboardInterrupt:
++                print("\nVerificación cancelada")
++                break
++    # Ejecuta una nueva simulación de caminata y el flujo completo de la simulacion lo que realiza es generar números pseudoaleatorios
++    # Ejecuta pruebas estadísticas (si fueron seleccionadas)
++    # Simula caminata de la rana. Grafica y permite al usuario verificar si la rana paso por una coordenada determinada  y por ultimo Mide el tiempo total.
+     def ejecutar_simulacion(self):
+-        """Función principal que ejecuta toda la simulación"""
+         try:
+-            x_o, k, c, g, n = self.obtener_parametros_generacion()
+-
++            tiempo_inicio = time.time()
++            # Paso 1: Obtener parámetros
++            x_o, k, c, g, n = self.obtener_parametros()
++            # Paso 2: Generar números
+             print(f"\nGenerando {n} números pseudoaleatorios...")
+             df = generar(x_o, k, c, g, n)
+             numeros = df['Ri'].tolist()
+             print(f"Números generados exitosamente")
+             print(f"Primeros 5 números: {numeros[:5]}")
+-
++            # Paso 3: Configurar y ejecutar pruebas
+             pruebas, alpha = self.configurar_pruebas()
+-
+             if any(pruebas.values()):
+                 print(f"\nEjecutando pruebas estadísticas...")
+                 resultados = self.ejecutar_pruebas(numeros, pruebas, alpha)
+-
+                 # Mostrar resultados
+                 todas_pasaron = self.mostrar_resultados_pruebas(resultados)
+-
+                 if not todas_pasaron:
+-                    print("\n⚠ADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
++                    print("\nADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
+                     continuar = input("¿Desea continuar con la simulación de todos modos? (s/n): ")
+                     if not continuar.lower().startswith('s'):
+                         print("Simulación cancelada. Intente con otros parámetros.")
+@@ -451,25 +411,30 @@
+                 continuar = input("¿Desea continuar sin pruebas? (s/n): ")
+                 if not continuar.lower().startswith('s'):
+                     return
+-
++            # Paso 4: Configurar simulación 3D
+             print(f"\nIniciando simulación de caminata aleatoria 3D...")
+             posicion_inicial_x = int(input("Posición inicial X (0): ") or "0")
+             posicion_inicial_y = int(input("Posición inicial Y (0): ") or "0")
+             posicion_inicial_z = int(input("Posición inicial Z (0): ") or "0")
+-
++            # Obtener número de pasos
+             num_pasos = self.obtener_numero_pasos(len(numeros))
+-
+             posiciones_x, posiciones_y, posiciones_z, conteo_direcciones = self.simular_caminata_3d(
+                 numeros, posicion_inicial_x, posicion_inicial_y, posicion_inicial_z, num_pasos
+             )
+-
++            # Paso 6: Graficar
+             print(f"\nGenerando gráficas...")
+             self.graficar_caminata_3d(posiciones_x, posiciones_y, posiciones_z, conteo_direcciones)
+-
+-            print(f"\nSimulación 3D completada exitosamente!")
+-
++            # Paso 7: Verificador de coordenadas 3D
++            verificar = input("\n¿Desea verificar si la rana pasó por alguna coordenada específica? (s/n): ")
++            if verificar.lower().startswith('s'):
++                self.verificar_coordenada_3d(posiciones_x, posiciones_y, posiciones_z)
++            # Calcula el tiempo de ejecución del programa en segundos
++            tiempo_fin = time.time()
++            tiempo_total = tiempo_fin - tiempo_inicio
++            print(f"\nTiempo total de ejecución: {tiempo_total:.3f} segundos")
++            print(f"Simulación completada exitosamente!")
+         except KeyboardInterrupt:
+-            print("\n\n⚠Simulación interrumpida por el usuario")
++            print("\n\nSimulación interrumpida por el usuario")
+         except Exception as e:
+             print(f"\nError inesperado: {e}")
+ 
+Index: code/pruebas/poker.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>import json\r\nfrom collections import Counter\r\nimport scipy.stats as stats\r\n\r\ndef poker_test_json(datos, alpha=0.05):\r\n    \"\"\"\r\n    numbers: lista de números pseudoaleatorios\r\n    Retorna un JSON con la estructura de la prueba de póker.\r\n    \"\"\"\r\n    n = len(datos)\r\n\r\n    # Probabilidades teóricas\r\n    probs = {\r\n        \"D\": 0.3024,   # Todos diferentes\r\n        \"O\": 0.504,    # Un par\r\n        \"T\": 0.108,    # Dos pares\r\n        \"K\": 0.072,    # Tercia\r\n        \"F\": 0.009,    # Full\r\n        \"P\": 0.0045,   # Poker\r\n        \"Q\": 0.0001    # Quintilla\r\n    }\r\n\r\n    # Clasificación de cada número\r\n    def classify(num):\r\n        digits = list(str(num).replace(\"0.\", \"\"))[:5]  # tomamos 5 dígitos\r\n        counts = sorted(Counter(digits).values(), reverse=True)\r\n\r\n        if counts == [5]:\r\n            return \"Q\"  # Quintilla\r\n        elif counts == [4,1]:\r\n            return \"P\"  # Poker\r\n        elif counts == [3,2]:\r\n            return \"F\"  # Full\r\n        elif counts == [3,1,1]:\r\n            return \"K\"  # Tercia\r\n        elif counts == [2,2,1]:\r\n            return \"T\"  # Dos pares\r\n        elif counts == [2,1,1,1]:\r\n            return \"O\"  # Un par\r\n        else:\r\n            return \"D\"  # Todos diferentes\r\n\r\n    # Recuento de observados\r\n    observed = {cat: 0 for cat in probs}\r\n    for num in datos:\r\n        cat = classify(num)\r\n        observed[cat] += 1\r\n\r\n    # Esperados\r\n    expected = {cat: n * p for cat, p in probs.items()}\r\n\r\n    # Estructura de datos similar a la tabla\r\n    categories_data = []\r\n    suma_oi = 0\r\n    suma_chi2 = 0\r\n    \r\n    for cat in [\"D\", \"O\", \"T\", \"K\", \"F\", \"P\", \"Q\"]:\r\n        oi = observed[cat]\r\n        prob = probs[cat]\r\n        ei = expected[cat]\r\n        \r\n        # Cálculo de (Oi-Ei)^2 / Ei solo si Ei > 0\r\n        chi2_component = ((oi - ei)**2) / ei if ei > 0 else 0\r\n        chi2_component = chi2_component\r\n        \r\n        categories_data.append({\r\n            \"Cat\": cat,\r\n            \"Oi\": oi,\r\n            \"Prob\": prob,\r\n            \"Ei\": ei,\r\n            \"(Oi-Ei)^2/Ei\": chi2_component\r\n        })\r\n        \r\n        suma_oi += oi\r\n        suma_chi2 += chi2_component\r\n\r\n    # Valor crítico (gl = categorias-1 = 6, alfa=0.05 → 12.59 aprox.)\r\n    chi2_critical = stats.chi2.ppf(1 - alpha, 6)\r\n\r\n    result = {\r\n        \"test_name\": \"Prueba de Poker\",\r\n        \"intervals_data\": categories_data,\r\n        \"statistics\": {\r\n            \"Suma_Oi\": suma_oi,\r\n            \"Chi2_calculado\": suma_chi2,\r\n            \"critical_value\": chi2_critical\r\n        },      \r\n        \"decision\": \"Pasa la prueba de poker.\" if suma_chi2 <= chi2_critical else \"No pasa la prueba de poker.\",\r\n        \"isApproved\": str(suma_chi2 <= chi2_critical)\r\n    }\r\n\r\n    return json.dumps(result, indent=4, ensure_ascii=False)\r\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/pruebas/poker.py b/code/pruebas/poker.py
+--- a/code/pruebas/poker.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ b/code/pruebas/poker.py	(date 1758391111569)
+@@ -4,65 +4,72 @@
+ 
+ def poker_test_json(datos, alpha=0.05):
+     """
+-    numbers: lista de números pseudoaleatorios
+-    Retorna un JSON con la estructura de la prueba de póker.
++    Test de Poker: verifica aleatoriedad analizando patrones de dígitos
++    en números pseudoaleatorios (como patrones de cartas en poker)
++
++    Parámetros:
++    - datos: lista de números pseudoaleatorios a analizar
++    - alpha: nivel de significancia (default: 0.05)
+     """
+     n = len(datos)
+-
+-    # Probabilidades teóricas
++    # Probabilidades teóricas para cada patrón (basadas en teoría combinatoria)
+     probs = {
+-        "D": 0.3024,   # Todos diferentes
+-        "O": 0.504,    # Un par
+-        "T": 0.108,    # Dos pares
+-        "K": 0.072,    # Tercia
+-        "F": 0.009,    # Full
+-        "P": 0.0045,   # Poker
+-        "Q": 0.0001    # Quintilla
++        "D": 0.3024,   # Todos diferentes (ej: 12345)
++        "O": 0.504,    # Un par (ej: 11234)
++        "T": 0.108,    # Dos pares (ej: 11223)
++        "K": 0.072,    # Tercia (ej: 11123)
++        "F": 0.009,    # Full - tercia + par (ej: 11122)
++        "P": 0.0045,   # Poker - cuádrupla (ej: 11112)
++        "Q": 0.0001    # Quintilla - todos iguales (ej: 11111)
+     }
+ 
+-    # Clasificación de cada número
+     def classify(num):
+-        digits = list(str(num).replace("0.", ""))[:5]  # tomamos 5 dígitos
++        # Extraer exactamente 5 dígitos después del punto decimal
++        num_str = f"{num:.5f}"  # Asegurar 5 decimales
++        digits_part = num_str.split('.')[1]  # Parte después del punto
++
++        # Tomar exactamente 5 dígitos
++        if len(digits_part) >= 5:
++            digits = list(digits_part[:5])
++        else:
++            digits = list(digits_part.ljust(5, '0'))  # Rellenar con ceros si es necesario
++
++        # Contar frecuencias de cada dígito
+         counts = sorted(Counter(digits).values(), reverse=True)
+ 
++        # Clasificar según el patrón
+         if counts == [5]:
+             return "Q"  # Quintilla
+-        elif counts == [4,1]:
++        elif counts == [4, 1]:
+             return "P"  # Poker
+-        elif counts == [3,2]:
++        elif counts == [3, 2]:
+             return "F"  # Full
+-        elif counts == [3,1,1]:
++        elif counts == [3, 1, 1]:
+             return "K"  # Tercia
+-        elif counts == [2,2,1]:
++        elif counts == [2, 2, 1]:
+             return "T"  # Dos pares
+-        elif counts == [2,1,1,1]:
++        elif counts == [2, 1, 1, 1]:
+             return "O"  # Un par
+-        else:
++        else:  # counts == [1, 1, 1, 1, 1]
+             return "D"  # Todos diferentes
+ 
+-    # Recuento de observados
++    # Clasificar todos los números
+     observed = {cat: 0 for cat in probs}
++
+     for num in datos:
+         cat = classify(num)
+         observed[cat] += 1
+-
+-    # Esperados
++    # Calcular frecuencias esperadas
+     expected = {cat: n * p for cat, p in probs.items()}
+-
+-    # Estructura de datos similar a la tabla
++    # Preparar datos para chi-cuadrado
+     categories_data = []
+-    suma_oi = 0
+     suma_chi2 = 0
+-    
++
+     for cat in ["D", "O", "T", "K", "F", "P", "Q"]:
+         oi = observed[cat]
+         prob = probs[cat]
+         ei = expected[cat]
+-        
+-        # Cálculo de (Oi-Ei)^2 / Ei solo si Ei > 0
+         chi2_component = ((oi - ei)**2) / ei if ei > 0 else 0
+-        chi2_component = chi2_component
+-        
+         categories_data.append({
+             "Cat": cat,
+             "Oi": oi,
+@@ -70,23 +77,45 @@
+             "Ei": ei,
+             "(Oi-Ei)^2/Ei": chi2_component
+         })
+-        
+-        suma_oi += oi
++
+         suma_chi2 += chi2_component
+ 
+-    # Valor crítico (gl = categorias-1 = 6, alfa=0.05 → 12.59 aprox.)
++    # Valor crítico con 6 grados de libertad
+     chi2_critical = stats.chi2.ppf(1 - alpha, 6)
++    pasa_prueba = suma_chi2 <= chi2_critical
+ 
+     result = {
+-        "test_name": "Prueba de Poker",
++        "test_name": "Prueba de Poker Corregida",
+         "intervals_data": categories_data,
+         "statistics": {
+-            "Suma_Oi": suma_oi,
++            "n": n,
+             "Chi2_calculado": suma_chi2,
+-            "critical_value": chi2_critical
+-        },      
+-        "decision": "Pasa la prueba de poker." if suma_chi2 <= chi2_critical else "No pasa la prueba de poker.",
+-        "isApproved": str(suma_chi2 <= chi2_critical)
++            "critical_value": chi2_critical,
++            "grados_libertad": 6
++        },
++        "decision": "Pasa la prueba de poker." if pasa_prueba else "No pasa la prueba de poker.",
++        "isApproved": str(pasa_prueba)
+     }
+-
+     return json.dumps(result, indent=4, ensure_ascii=False)
++
++
++"""
++¿QUÉ HACE ESTE TEST?
++
++El test de Poker analiza si los dígitos de números pseudoaleatorios
++aparecen con patrones similares a las manos de poker.
++
++LÓGICA:
++1. Toma los primeros 5 dígitos de cada número
++2. Clasifica cada número según el patrón de repetición de dígitos
++3. Compara las frecuencias observadas vs las esperadas teóricamente
++4. Usa chi-cuadrado para determinar si las diferencias son significativas
++
++EJEMPLO:
++- Número: 0.12345 → Dígitos: [1,2,3,4,5] → Patrón: "D" (todos diferentes)
++- Número: 0.11234 → Dígitos: [1,1,2,3,4] → Patrón: "O" (un par)
++- Número: 0.11122 → Dígitos: [1,1,1,2,2] → Patrón: "F" (full)
++
++PROPÓSITO: Detectar si un generador produce patrones no aleatorios
++en la secuencia de dígitos de sus números.
++"""
+\ No newline at end of file
+Index: code/pruebas/dispatcher.py
+===================================================================
+diff --git a/code/pruebas/dispatcher.py b/code/pruebas/dispatcher.py
+deleted file mode 100644
+--- a/code/pruebas/dispatcher.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ /dev/null	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
+@@ -1,26 +0,0 @@
+-from prueba_de_medias import prueba_de_medias
+-from prueba_de_varianza import prueba_de_varianza
+-from prueba_chi2_2 import prueba_chi_cuadrado
+-from ks import kolmogorov_smirnov_test
+-from poker import poker_test_json
+-from rachas import prueba_rachas
+-
+-PRUEBAS_DISPONIBLES = {
+-    "medias": prueba_de_medias,
+-    "varianza": prueba_de_varianza,
+-    "chi": prueba_chi_cuadrado,
+-    "kolmogorov": kolmogorov_smirnov_test,
+-    "poker": poker_test_json,
+-    "rachas": prueba_rachas
+-}
+-
+-def ejecutar_pruebas(datos, pruebas, alpha):
+-    resultados = {}
+-    for nombre, info in pruebas.items():
+-        if nombre == "kolmogorov" and info != False and nombre in PRUEBAS_DISPONIBLES:
+-            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, k=info.get("k") , alpha=alpha)
+-        elif nombre == "chi" and info != False and nombre in PRUEBAS_DISPONIBLES:
+-            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, k=info.get("k"), alpha=alpha) 
+-        elif info and nombre in PRUEBAS_DISPONIBLES:
+-            resultados[nombre] = PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)
+-    return resultados
+Index: code/CaminataAleatoria2D.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/code/CaminataAleatoria2D.py b/code/CaminataAleatoria2D.py
+deleted file mode 100644
+--- a/code/CaminataAleatoria2D.py	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
++++ /dev/null	(revision c833e99877f4643f94b8150216c421aaa569dcb8)
+@@ -1,365 +0,0 @@
+-import json
+-import matplotlib.pyplot as plt
+-import numpy as np
+-import sys
+-import os
+-
+-
+-from pruebas.Generador import generar
+-
+-from pruebas.prueba_de_medias import prueba_de_medias
+-from pruebas.prueba_de_varianza import prueba_de_varianza
+-from pruebas.prueba_chi2_2 import prueba_chi_cuadrado
+-from pruebas.ks import kolmogorov_smirnov_test
+-from pruebas.poker import poker_test_json
+-from pruebas.rachas import prueba_rachas
+-
+-class CaminataAleatoria2D:
+-
+-    def __init__(self):
+-        """Inicializa la clase de caminata 2D"""
+-        self.direcciones = {
+-            'Norte': (0, 1),   # ↑
+-            'Sur': (0, -1),    # ↓
+-            'Este': (1, 0),    # →
+-            'Oeste': (-1, 0)   # ←
+-        }
+-        self.nombres_direcciones = ['Norte', 'Este', 'Sur', 'Oeste']
+-        self.simbolos_direcciones = ['↑', '→', '↓', '←']
+-
+-        # Diccionario de pruebas disponibles
+-        self.PRUEBAS_DISPONIBLES = {
+-            "medias": prueba_de_medias,
+-            "varianza": prueba_de_varianza,
+-            "chi": prueba_chi_cuadrado,
+-            "kolmogorov": kolmogorov_smirnov_test,
+-            "poker": poker_test_json,
+-            "rachas": prueba_rachas
+-        }
+-
+-    def obtener_parametros_generacion(self):
+-        """Obtiene los parámetros del usuario para la generación de números"""
+-        print("SIMULADOR DE CAMINATA ALEATORIA 2D")
+-        print("=" * 50)
+-        print("=== GENERACIÓN DE NÚMEROS PSEUDOALEATORIOS ===")
+-        print("Ingrese los parámetros para el generador congruencial lineal:")
+-
+-        try:
+-            x_o = int(input("Semilla inicial (x_0): "))
+-            k = int(input("Parámetro k: "))
+-            c = int(input("Constante aditiva (c): "))
+-            g = int(input("Exponente de módulo (g) donde m = 2^g: "))
+-            n = int(input("Cantidad de números a generar: "))
+-
+-            if n < 10:
+-                print("Advertencia: Se recomienda al menos 10 números para las pruebas estadísticas")
+-
+-            return x_o, k, c, g, n
+-        except ValueError:
+-            print("Error: Ingrese solo números enteros")
+-            return self.obtener_parametros_generacion()
+-
+-    def configurar_pruebas(self):
+-        """Configura qué pruebas estadísticas ejecutar"""
+-        print("\n=== CONFIGURACIÓN DE PRUEBAS ESTADÍSTICAS ===")
+-        print("¿Qué pruebas desea ejecutar? (s/n)")
+-
+-        pruebas = {}
+-
+-        # Pruebas básicas
+-        pruebas["medias"] = input("Prueba de Medias (s/n): ").lower().startswith('s')
+-        pruebas["varianza"] = input("Prueba de Varianza (s/n): ").lower().startswith('s')
+-        pruebas["rachas"] = input("Prueba de Rachas (s/n): ").lower().startswith('s')
+-        pruebas["poker"] = input("Prueba de Póker (s/n): ").lower().startswith('s')
+-
+-        # Pruebas con parámetros
+-        if input("Prueba Chi-Cuadrado (s/n): ").lower().startswith('s'):
+-            k = int(input("  Número de intervalos (k): "))
+-            pruebas["chi"] = {"k": k}
+-        else:
+-            pruebas["chi"] = False
+-
+-        if input("Prueba Kolmogorov-Smirnov (s/n): ").lower().startswith('s'):
+-            k = int(input("  Número de intervalos (k): "))
+-            pruebas["kolmogorov"] = {"k": k}
+-        else:
+-            pruebas["kolmogorov"] = False
+-
+-        # Nivel de significancia
+-        alpha = float(input("Nivel de significancia (alpha, ej: 0.05): ") or "0.05")
+-
+-        return pruebas, alpha
+-
+-    def ejecutar_pruebas(self, datos, pruebas, alpha):
+-        """Ejecuta las pruebas estadísticas seleccionadas"""
+-        resultados = {}
+-        for nombre, info in pruebas.items():
+-            if nombre == "kolmogorov" and info != False and nombre in self.PRUEBAS_DISPONIBLES:
+-                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, k=info.get("k"), alpha=alpha)
+-            elif nombre == "chi" and info != False and nombre in self.PRUEBAS_DISPONIBLES:
+-                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, k=info.get("k"), alpha=alpha)
+-            elif info and nombre in self.PRUEBAS_DISPONIBLES:
+-                resultados[nombre] = self.PRUEBAS_DISPONIBLES[nombre](datos, alpha=alpha)
+-        return resultados
+-
+-    def mostrar_resultados_pruebas(self, resultados):
+-        """Muestra los resultados de las pruebas estadísticas"""
+-        print("\n=== RESULTADOS DE PRUEBAS ESTADÍSTICAS ===")
+-
+-        pruebas_pasadas = 0
+-        total_pruebas = 0
+-
+-        for nombre, resultado_json in resultados.items():
+-            try:
+-                resultado = json.loads(resultado_json)
+-                total_pruebas += 1
+-
+-                aprobado = resultado.get("isApproved", "False").lower() == "true"
+-                if aprobado:
+-                    pruebas_pasadas += 1
+-                    status = "PASÓ"
+-                else:
+-                    status = "NO PASÓ"
+-
+-                print(f"\n{resultado['test_name']}: {status}")
+-                print(f"  Decisión: {resultado['decision']}")
+-
+-                # Mostrar estadísticas clave según el tipo de prueba
+-                if 'statistics' in resultado:
+-                    stats = resultado['statistics']
+-                    if 'chi2_total' in stats:
+-                        print(f"  Chi² calculado: {stats['chi2_total']:.4f}")
+-                        print(f"  Chi² crítico: {stats['chi2_critico']:.4f}")
+-                    elif 'max_difference' in stats:
+-                        print(f"  Diferencia máxima: {stats['max_difference']:.4f}")
+-                        print(f"  Valor crítico: {stats['critical_value']:.4f}")
+-                    elif 'Chi2_calculado' in stats:
+-                        print(f"  Chi² calculado: {stats['Chi2_calculado']:.4f}")
+-                        print(f"  Valor crítico: {stats['critical_value']:.4f}")
+-
+-            except json.JSONDecodeError:
+-                print(f"{nombre}: Error al procesar resultado")
+-
+-        print(f"\nRESUMEN: {pruebas_pasadas}/{total_pruebas} pruebas pasadas")
+-
+-        return pruebas_pasadas == total_pruebas
+-
+-    def obtener_numero_pasos(self, max_pasos):
+-        """Obtiene el número de pasos que el usuario quiere simular"""
+-        while True:
+-            try:
+-                pasos = int(input(f"¿Cuántos pasos quiere que dé la rana? (máximo {max_pasos}): "))
+-                if 1 <= pasos <= max_pasos:
+-                    return pasos
+-                else:
+-                    print(f"❌ Error: El número de pasos debe estar entre 1 y {max_pasos}")
+-            except ValueError:
+-                print("❌ Error: Ingrese un número entero válido")
+-
+-    def determinar_direccion(self, numero_aleatorio):
+-
+-        if 0.00 <= numero_aleatorio < 0.25:
+-            return 'Norte', self.direcciones['Norte'], '↑'
+-        elif 0.25 <= numero_aleatorio < 0.50:
+-            return 'Este', self.direcciones['Este'], '→'
+-        elif 0.50 <= numero_aleatorio < 0.75:
+-            return 'Sur', self.direcciones['Sur'], '↓'
+-        else:  # 0.75 <= numero_aleatorio < 1.00
+-            return 'Oeste', self.direcciones['Oeste'], '←'
+-
+-    def simular_caminata_2d(self, numeros_aleatorios, posicion_inicial_x=0, posicion_inicial_y=0, num_pasos=None):
+-        """Simula la caminata aleatoria de la rana en 2D"""
+-        if num_pasos is None:
+-            num_pasos = len(numeros_aleatorios)
+-
+-        # Usar solo los primeros num_pasos números
+-        numeros_a_usar = numeros_aleatorios[:num_pasos]
+-
+-        print(f"\n=== SIMULACIÓN DE CAMINATA ALEATORIA 2D ===")
+-        print(f"Posición inicial: ({posicion_inicial_x}, {posicion_inicial_y})")
+-        print(f"Direcciones posibles: Norte(↑), Este(→), Sur(↓), Oeste(←)")
+-        print(f"Probabilidad por dirección: 0.25 cada una")
+-        print(f"Número de pasos a simular: {num_pasos}")
+-        print(f"Números disponibles: {len(numeros_aleatorios)}")
+-
+-        # Listas para almacenar las posiciones
+-        posiciones_x = [posicion_inicial_x]
+-        posiciones_y = [posicion_inicial_y]
+-
+-        # Posición actual
+-        x_actual = posicion_inicial_x
+-        y_actual = posicion_inicial_y
+-
+-        # Estadísticas de movimiento
+-        conteo_direcciones = {'Norte': 0, 'Este': 0, 'Sur': 0, 'Oeste': 0}
+-
+-        print("\nPasos de la rana:")
+-        print("Paso | Número   | Dirección | Movimiento | Posición")
+-        print("-" * 50)
+-
+-        for i, numero in enumerate(numeros_a_usar):
+-            direccion_nombre, (dx, dy), simbolo = self.determinar_direccion(numero)
+-
+-            # Actualizar posición
+-            x_actual += dx
+-            y_actual += dy
+-
+-            # Guardar nueva posición
+-            posiciones_x.append(x_actual)
+-            posiciones_y.append(y_actual)
+-
+-            # Contar dirección
+-            conteo_direcciones[direccion_nombre] += 1
+-
+-            print(f"{i+1:4d} | {numero:.5f} | {direccion_nombre:8s} | {simbolo:8s}   | ({x_actual:3d}, {y_actual:3d})")
+-
+-        return posiciones_x, posiciones_y, conteo_direcciones
+-
+-    def graficar_caminata_2d(self, posiciones_x, posiciones_y, conteo_direcciones):
+-        """Grafica la trayectoria de la rana en 2D"""
+-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+-
+-        # Gráfico 1: Trayectoria de la caminata
+-        ax1.plot(posiciones_x, posiciones_y, 'b-', linewidth=2, alpha=0.7, label='Trayectoria')
+-        ax1.scatter(posiciones_x, posiciones_y, c=range(len(posiciones_x)),
+-                    cmap='viridis', s=30, alpha=0.8, edgecolors='black', linewidth=0.5)
+-
+-        # Marcar inicio y fin
+-        ax1.scatter(posiciones_x[0], posiciones_y[0], c='green', s=150,
+-                    marker='s', label='Inicio', edgecolors='black', linewidth=2)
+-        ax1.scatter(posiciones_x[-1], posiciones_y[-1], c='red', s=150,
+-                    marker='X', label='Final', edgecolors='black', linewidth=2)
+-
+-        # Líneas de referencia
+-        ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+-        ax1.axvline(x=0, color='gray', linestyle='--', alpha=0.5)
+-
+-        ax1.set_xlabel('Posición X')
+-        ax1.set_ylabel('Posición Y')
+-        ax1.set_title('Caminata Aleatoria 2D de una Rana')
+-        ax1.grid(True, alpha=0.3)
+-        ax1.legend()
+-        ax1.set_aspect('equal', adjustable='box')
+-
+-        # Gráfico 2: Distribución de direcciones
+-        direcciones = list(conteo_direcciones.keys())
+-        conteos = list(conteo_direcciones.values())
+-        colores = ['lightblue', 'lightgreen', 'lightcoral', 'lightyellow']
+-        simbolos = ['↑', '→', '↓', '←']
+-
+-        barras = ax2.bar(direcciones, conteos, color=colores, edgecolor='black', linewidth=1)
+-
+-        # Agregar símbolos y valores en las barras
+-        for i, (barra, simbolo, valor) in enumerate(zip(barras, simbolos, conteos)):
+-            height = barra.get_height()
+-            ax2.text(barra.get_x() + barra.get_width()/2., height + 0.1,
+-                     f'{simbolo}\n{valor}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+-
+-        ax2.set_ylabel('Número de Movimientos')
+-        ax2.set_title('Distribución de Direcciones')
+-        ax2.grid(True, alpha=0.3, axis='y')
+-
+-        # Línea de referencia para distribución uniforme
+-        if sum(conteos) > 0:
+-            promedio = sum(conteos) / 4
+-            ax2.axhline(y=promedio, color='red', linestyle='--',
+-                        label=f'Distribución uniforme ({promedio:.1f})', alpha=0.7)
+-            ax2.legend()
+-
+-        plt.tight_layout()
+-        plt.show()
+-
+-        # Estadísticas de la caminata
+-        self.mostrar_estadisticas_2d(posiciones_x, posiciones_y, conteo_direcciones)
+-
+-    def mostrar_estadisticas_2d(self, posiciones_x, posiciones_y, conteo_direcciones):
+-        """Muestra estadísticas detalladas de la caminata 2D"""
+-        print(f"\nESTADÍSTICAS DE LA CAMINATA 2D:")
+-
+-        # Posiciones
+-        print(f"  Posición inicial: ({posiciones_x[0]}, {posiciones_y[0]})")
+-        print(f"  Posición final: ({posiciones_x[-1]}, {posiciones_y[-1]})")
+-
+-        # Desplazamientos
+-        dx_total = posiciones_x[-1] - posiciones_x[0]
+-        dy_total = posiciones_y[-1] - posiciones_y[0]
+-        distancia_euclidiana = np.sqrt(dx_total**2 + dy_total**2)
+-
+-        print(f"  Desplazamiento neto: ({dx_total:+d}, {dy_total:+d})")
+-        print(f"  Distancia euclidiana del origen: {distancia_euclidiana:.2f}")
+-
+-        # Rangos
+-        rango_x = (min(posiciones_x), max(posiciones_x))
+-        rango_y = (min(posiciones_y), max(posiciones_y))
+-        area_explorada = (rango_x[1] - rango_x[0] + 1) * (rango_y[1] - rango_y[0] + 1)
+-
+-        print(f"  Rango X: [{rango_x[0]}, {rango_x[1]}] (amplitud: {rango_x[1] - rango_x[0] + 1})")
+-        print(f"  Rango Y: [{rango_y[0]}, {rango_y[1]}] (amplitud: {rango_y[1] - rango_y[0] + 1})")
+-        print(f"  Área explorada: {area_explorada} unidades cuadradas")
+-
+-        # Distribución de direcciones
+-        total_pasos = sum(conteo_direcciones.values())
+-        print(f"\nDISTRIBUCIÓN DE DIRECCIONES:")
+-        for direccion, count in conteo_direcciones.items():
+-            porcentaje = (count / total_pasos) * 100 if total_pasos > 0 else 0
+-            simbolo = {'Norte': '↑', 'Este': '→', 'Sur': '↓', 'Oeste': '←'}[direccion]
+-            print(f"  {direccion} {simbolo}: {count:3d} pasos ({porcentaje:5.1f}%)")
+-
+-        print(f"  Total de pasos: {total_pasos}")
+-
+-    def ejecutar_simulacion(self):
+-        try:
+-            x_o, k, c, g, n = self.obtener_parametros_generacion()
+-
+-            print(f"\nGenerando {n} números pseudoaleatorios...")
+-            df = generar(x_o, k, c, g, n)
+-            numeros = df['Ri'].tolist()
+-            print(f"Números generados exitosamente")
+-            print(f"Primeros 5 números: {numeros[:5]}")
+-
+-            pruebas, alpha = self.configurar_pruebas()
+-
+-            if any(pruebas.values()):
+-                print(f"\nEjecutando pruebas estadísticas...")
+-                resultados = self.ejecutar_pruebas(numeros, pruebas, alpha)
+-
+-                todas_pasaron = self.mostrar_resultados_pruebas(resultados)
+-
+-                if not todas_pasaron:
+-                    print("\nADVERTENCIA: No todos los números pasaron las pruebas estadísticas")
+-                    continuar = input("¿Desea continuar con la simulación de todos modos? (s/n): ")
+-                    if not continuar.lower().startswith('s'):
+-                        print("Simulación cancelada. Intente con otros parámetros.")
+-                        return
+-            else:
+-                print("No se ejecutaron pruebas estadísticas")
+-                continuar = input("¿Desea continuar sin pruebas? (s/n): ")
+-                if not continuar.lower().startswith('s'):
+-                    return
+-
+-            print(f"\nIniciando simulación de caminata aleatoria 2D...")
+-            posicion_inicial_x = int(input("Posición inicial X (0): ") or "0")
+-            posicion_inicial_y = int(input("Posición inicial Y (0): ") or "0")
+-
+-            num_pasos = self.obtener_numero_pasos(len(numeros))
+-
+-            posiciones_x, posiciones_y, conteo_direcciones = self.simular_caminata_2d(
+-                numeros, posicion_inicial_x, posicion_inicial_y, num_pasos
+-            )
+-
+-            print(f"\nGenerando gráficas...")
+-            self.graficar_caminata_2d(posiciones_x, posiciones_y, conteo_direcciones)
+-
+-            print(f"\nSimulación 2D completada exitosamente!")
+-
+-        except KeyboardInterrupt:
+-            print("\n\nSimulación interrumpida por el usuario")
+-        except Exception as e:
+-            print(f"\nError inesperado: {e}")
+-
+-def main():
+-    simulador = CaminataAleatoria2D()
+-    simulador.ejecutar_simulacion()
+-
+-if __name__ == "__main__":
+-    main()
+\ No newline at end of file

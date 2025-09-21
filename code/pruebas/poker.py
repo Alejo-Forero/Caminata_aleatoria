@@ -22,47 +22,58 @@ def poker_test_json(datos, alpha=0.05):
 
     # Clasificación de cada número
     def classify(num):
-        digits = list(str(num).replace("0.", ""))[:5]  # tomamos 5 dígitos
+        """
+        Clasificación corregida de patrones
+        """
+        # Extraer exactamente 5 dígitos después del punto decimal
+        num_str = f"{num:.5f}"  # Asegurar 5 decimales
+        digits_part = num_str.split('.')[1]  # Parte después del punto
+
+        # Tomar exactamente 5 dígitos
+        if len(digits_part) >= 5:
+            digits = list(digits_part[:5])
+        else:
+            digits = list(digits_part.ljust(5, '0'))  # Rellenar con ceros si es necesario
+
+        # Contar frecuencias de cada dígito
         counts = sorted(Counter(digits).values(), reverse=True)
 
+        # Clasificar según el patrón
         if counts == [5]:
             return "Q"  # Quintilla
-        elif counts == [4,1]:
+        elif counts == [4, 1]:
             return "P"  # Poker
-        elif counts == [3,2]:
+        elif counts == [3, 2]:
             return "F"  # Full
-        elif counts == [3,1,1]:
+        elif counts == [3, 1, 1]:
             return "K"  # Tercia
-        elif counts == [2,2,1]:
+        elif counts == [2, 2, 1]:
             return "T"  # Dos pares
-        elif counts == [2,1,1,1]:
+        elif counts == [2, 1, 1, 1]:
             return "O"  # Un par
-        else:
+        else:  # counts == [1, 1, 1, 1, 1]
             return "D"  # Todos diferentes
 
-    # Recuento de observados
+    # Clasificar todos los números
     observed = {cat: 0 for cat in probs}
     for num in datos:
         cat = classify(num)
         observed[cat] += 1
 
-    # Esperados
+    # Calcular frecuencias esperadas
     expected = {cat: n * p for cat, p in probs.items()}
 
-    # Estructura de datos similar a la tabla
+    # Preparar datos para chi-cuadrado
     categories_data = []
-    suma_oi = 0
     suma_chi2 = 0
-    
+
     for cat in ["D", "O", "T", "K", "F", "P", "Q"]:
         oi = observed[cat]
         prob = probs[cat]
         ei = expected[cat]
-        
-        # Cálculo de (Oi-Ei)^2 / Ei solo si Ei > 0
+
         chi2_component = ((oi - ei)**2) / ei if ei > 0 else 0
-        chi2_component = chi2_component
-        
+
         categories_data.append({
             "Cat": cat,
             "Oi": oi,
@@ -70,23 +81,43 @@ def poker_test_json(datos, alpha=0.05):
             "Ei": ei,
             "(Oi-Ei)^2/Ei": chi2_component
         })
-        
-        suma_oi += oi
+
         suma_chi2 += chi2_component
 
-    # Valor crítico (gl = categorias-1 = 6, alfa=0.05 → 12.59 aprox.)
+    # Valor crítico con 6 grados de libertad
     chi2_critical = stats.chi2.ppf(1 - alpha, 6)
+    pasa_prueba = suma_chi2 <= chi2_critical
 
     result = {
         "test_name": "Prueba de Poker",
         "intervals_data": categories_data,
         "statistics": {
-            "Suma_Oi": suma_oi,
+            "n": n,
             "Chi2_calculado": suma_chi2,
-            "critical_value": chi2_critical
-        },      
-        "decision": "Pasa la prueba de poker." if suma_chi2 <= chi2_critical else "No pasa la prueba de poker.",
-        "isApproved": str(suma_chi2 <= chi2_critical)
+            "critical_value": chi2_critical,
+            "grados_libertad": 6
+        },
+        "decision": "Pasa la prueba de poker." if pasa_prueba else "No pasa la prueba de poker.",
+        "isApproved": str(pasa_prueba)
     }
-
     return json.dumps(result, indent=4, ensure_ascii=False)
+"""
+¿QUÉ HACE ESTE TEST?
+
+El test de Poker analiza si los dígitos de números pseudoaleatorios
+aparecen con patrones similares a las manos de poker.
+
+LÓGICA:
+1. Toma los primeros 5 dígitos de cada número
+2. Clasifica cada número según el patrón de repetición de dígitos
+3. Compara las frecuencias observadas vs las esperadas teóricamente
+4. Usa chi-cuadrado para determinar si las diferencias son significativas
+
+EJEMPLO:
+- Número: 0.12345 → Dígitos: [1,2,3,4,5] → Patrón: "D" (todos diferentes)
+- Número: 0.11234 → Dígitos: [1,1,2,3,4] → Patrón: "O" (un par)
+- Número: 0.11122 → Dígitos: [1,1,1,2,2] → Patrón: "F" (full)
+
+PROPÓSITO: Detectar si un generador produce patrones no aleatorios
+en la secuencia de dígitos de sus números.
+"""
